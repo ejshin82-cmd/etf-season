@@ -569,7 +569,7 @@ function initSearch(){
     timer=setTimeout(async ()=>{
       box.innerHTML='<div class="empty">검색 중…</div>'; box.style.display='block';
       try{
-        const r=await fetch(`/api/search?q=${encodeURIComponent(term)}`);
+        const r=await fetch(`/api/search?q=${encodeURIComponent(term)}`, {cache:'no-store'});
         const j=await r.json();
         if(!j.results||!j.results.length){ box.innerHTML='<div class="empty">검색 결과가 없어요. 정확한 종목명이나 티커로 시도해보세요.</div>'; return; }
         box.innerHTML=j.results.map(x=>

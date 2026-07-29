@@ -6,7 +6,7 @@
 const HEAD = {
   "content-type": "application/json; charset=utf-8",
   "access-control-allow-origin": "*",
-  "cache-control": "public, max-age=3600",
+  "cache-control": "no-store",
 };
 const UA = { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" };
 
