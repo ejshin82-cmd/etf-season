@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>보유종목 차트 진단</title>
+<title>종목 차트 진단</title>
 <style>
   :root{
     color-scheme: light;
@@ -46,6 +46,18 @@
   a.back:hover{color:var(--ink-1)}
   .card{ background:var(--surface-1); border:1px solid var(--ring); border-radius:14px; padding:18px 20px; margin-top:16px; }
   .controls{display:flex; gap:10px; flex-wrap:wrap; align-items:center}
+  .searchbox{position:relative; flex:1 1 260px; max-width:340px}
+  .searchbox input{ width:100%; font:inherit; font-size:14px; padding:9px 12px; border-radius:9px;
+    border:1px solid var(--axis); background:var(--surface-1); color:var(--ink-1); }
+  .searchbox input::placeholder{color:var(--ink-3)}
+  .sresults{ position:absolute; top:calc(100% + 4px); left:0; right:0; z-index:9;
+    background:var(--surface-1); border:1px solid var(--axis); border-radius:10px;
+    box-shadow:0 6px 18px rgba(0,0,0,.14); overflow:hidden; display:none; }
+  .sresults button{ display:block; width:100%; text-align:left; font:inherit; font-size:13.5px;
+    padding:9px 12px; border:0; background:transparent; color:var(--ink-1); cursor:pointer; }
+  .sresults button:hover{background:var(--bandfill)}
+  .sresults .meta{color:var(--ink-3); font-size:12px}
+  .sresults .empty{padding:10px 12px; font-size:13px; color:var(--ink-3)}
   select{ font:inherit; font-size:14px; padding:9px 12px; border-radius:9px;
     border:1px solid var(--axis); background:var(--surface-1); color:var(--ink-1); min-width:240px; }
   .seg{display:flex; border:1px solid var(--axis); border-radius:9px; overflow:hidden}
@@ -78,7 +90,7 @@
 <div class="wrap">
 <header>
   <div>
-    <h1>📊 보유종목 차트 진단</h1>
+    <h1>📊 종목 차트 진단</h1>
     <p class="sub" id="asof">데이터 불러오는 중…</p>
   </div>
   <a class="back" href="index.html">← 투자계절 대시보드</a>
@@ -86,7 +98,10 @@
 
 <div class="card">
   <div class="controls">
-    <select id="pick"></select>
+    <div class="searchbox">
+      <input id="q" placeholder="🔍 아무 종목이나 검색 (예: 삼성전자, TIGER 미국S&P500, AAPL)" autocomplete="off">
+      <div class="sresults" id="sres"></div>
+    </div>
     <div class="seg" id="rangeSeg">
       <button data-m="3">3개월</button>
       <button data-m="6" class="on">6개월</button>
@@ -145,6 +160,33 @@ function rsiSeries(c, p=14){
   }
   return out;
 }
+/* 원시 시계열 → 진단용 종목 객체 (검색 종목용) */
+function makeItem(name, symbol, currency, series){
+  const c=series.map(r=>r.c), n=c.length;
+  const close=c[n-1], prev=c[n-2];
+  const high52=Math.max(...c), low52=Math.min(...c);
+  const ma200=c.slice(-Math.min(200,n)).reduce((a,b)=>a+b,0)/Math.min(200,n);
+  const rsiArr=rsiSeries(c);
+  // 볼린저(20,2)
+  const w=c.slice(-20), mid=w.reduce((a,b)=>a+b,0)/w.length;
+  const sd=Math.sqrt(w.reduce((a,b)=>a+(b-mid)**2,0)/w.length);
+  const upper=mid+2*sd, lower=mid-2*sd;
+  return {
+    name, code:symbol, yahoo:symbol, currency,
+    close, date:series[n-1].d, prevClose:prev,
+    chgPct:+(((close-prev)/prev)*100).toFixed(2),
+    week1:n>6? +(((close-c[n-6])/c[n-6])*100).toFixed(2):null,
+    high52, low52,
+    offHigh52:+(((high52-close)/high52)*100).toFixed(2),
+    vsMa200:+((close/ma200-1)*100).toFixed(2),
+    rsi14: rsiArr[n-1]!=null? +rsiArr[n-1].toFixed(1):null,
+    bb20:{ mid:+mid.toFixed(4), upper:+upper.toFixed(4), lower:+lower.toFixed(4),
+      pctB: upper===lower?null:+(((close-lower)/(upper-lower))*100).toFixed(1),
+      bandWidth:+(((upper-lower)/mid)*100).toFixed(2) },
+    series,
+  };
+}
+
 function swings(s, look=3){
   const lo=[], hi=[], n=s.length;
   for(let i=look;i<n-look;i++){
@@ -505,15 +547,53 @@ async function init(){
     return;
   }
   const items=DATA.items.filter(x=>x.series&&x.series.length>40);
-  $('asof').textContent=`${DATA.asOf} 종가 기준 · 보유종목 ${items.length}개 · 매 영업일 아침 자동 갱신`;
-  const sel=$('pick');
-  sel.innerHTML=items.map((x,i)=>`<option value="${i}">${x.name} (${x.code})</option>`).join('');
-  sel.onchange=()=>{ CUR=items[+sel.value]; render(); };
+  $('asof').textContent=`${DATA.asOf} 종가 기준 · 아무 종목이나 검색해서 진단해보세요`;
   document.querySelectorAll('#rangeSeg button').forEach(b=>{
     b.onclick=()=>{ document.querySelectorAll('#rangeSeg button').forEach(x=>x.classList.remove('on'));
       b.classList.add('on'); MONTHS=+b.dataset.m; render(); };
   });
-  CUR=items[0]; render();
+  initSearch();
+  /* 첫 화면 예시: 대표 지수 ETF */
+  CUR=items.find(x=>x.name==='KODEX 200')||items[0]; render();
+}
+
+/* ---------- 종목 검색 (모든 종목) ---------- */
+function initSearch(){
+  const q=$('q'), box=$('sres');
+  let timer=null;
+  const hide=()=>{ box.style.display='none'; };
+  q.addEventListener('input', ()=>{
+    clearTimeout(timer);
+    const term=q.value.trim();
+    if(term.length<2){ hide(); return; }
+    timer=setTimeout(async ()=>{
+      box.innerHTML='<div class="empty">검색 중…</div>'; box.style.display='block';
+      try{
+        const r=await fetch(`/api/search?q=${encodeURIComponent(term)}`);
+        const j=await r.json();
+        if(!j.results||!j.results.length){ box.innerHTML='<div class="empty">검색 결과가 없어요. 정확한 종목명이나 티커로 시도해보세요.</div>'; return; }
+        box.innerHTML=j.results.map(x=>
+          `<button data-s="${x.symbol}" data-n="${x.name.replace(/"/g,'&quot;')}">${x.name} <span class="meta">${x.symbol} · ${x.exch}</span></button>`).join('');
+        box.querySelectorAll('button').forEach(b=>{
+          b.onclick=()=>{ hide(); q.value=b.dataset.n; loadSymbol(b.dataset.s, b.dataset.n); };
+        });
+      }catch(e){ box.innerHTML='<div class="empty">검색 서버가 잠시 응답하지 않아요 — 다시 시도해주세요.</div>'; }
+    }, 350);
+  });
+  document.addEventListener('click', (e)=>{ if(!e.target.closest('.searchbox')) hide(); });
+}
+
+async function loadSymbol(symbol, name){
+  $('fig').innerHTML='<div class="loading">'+name+' 시세 불러오는 중…</div>';
+  try{
+    const r=await fetch(`/api/chart?symbol=${encodeURIComponent(symbol)}`);
+    const j=await r.json();
+    if(j.error) throw new Error(j.error);
+    CUR=makeItem(name||j.name, j.symbol, j.currency, j.series);
+    render();
+  }catch(e){
+    $('fig').innerHTML=`<div class="loading">시세를 불러오지 못했어요 (${e.message}). 잠시 후 다시 시도해주세요.</div>`;
+  }
 }
 init();
 </script>
