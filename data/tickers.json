@@ -23,6 +23,7 @@
     { "name": "SOL 반도체전공정",        "code": "475300", "yahoo": "475300.KS" },
     { "name": "KODEX 코리아밸류업",      "code": "495850", "yahoo": "495850.KS" },
     { "name": "한화오션",               "code": "042660", "yahoo": "042660.KS" },
+    { "name": "삼성전자",               "code": "005930", "yahoo": "005930.KS" },
     { "name": "엔비디아",               "code": "NVDA",   "yahoo": "NVDA", "currency": "USD" }
   ]
 }
