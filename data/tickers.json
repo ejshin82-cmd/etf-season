@@ -1,0 +1,28 @@
+{
+  "comment": "보유종목 시세 수집 목록 — 종목명은 포트폴리오 시트의 종목명과 일치해야 함. 코드는 2026-07-29 검증 완료.",
+  "items": [
+    { "name": "KODEX 200",              "code": "069500", "yahoo": "069500.KS" },
+    { "name": "맥쿼리인프라",            "code": "088980", "yahoo": "088980.KS" },
+    { "name": "KODEX 반도체",           "code": "091160", "yahoo": "091160.KS" },
+    { "name": "KODEX 은행",             "code": "091170", "yahoo": "091170.KS" },
+    { "name": "TIGER 미국나스닥바이오",  "code": "203780", "yahoo": "203780.KS" },
+    { "name": "TIGER 일본니케이225",     "code": "241180", "yahoo": "241180.KS" },
+    { "name": "KODEX 필수소비재",        "code": "266410", "yahoo": "266410.KS" },
+    { "name": "KODEX 2차전지산업",       "code": "305720", "yahoo": "305720.KS" },
+    { "name": "ACE 200TR",              "code": "332500", "yahoo": "332500.KS" },
+    { "name": "이지스레지던스리츠",       "code": "350520", "yahoo": "350520.KS" },
+    { "name": "ESR켄달스퀘어리츠",       "code": "365550", "yahoo": "365550.KS" },
+    { "name": "KODEX 미국나스닥100",     "code": "379810", "yahoo": "379810.KS" },
+    { "name": "KODEX 미국반도체",        "code": "390390", "yahoo": "390390.KS" },
+    { "name": "ACE KRX금현물",          "code": "411060", "yahoo": "411060.KS" },
+    { "name": "KB 발해인프라",           "code": "415640", "yahoo": "415640.KS" },
+    { "name": "SOL 미국배당다우존스",    "code": "446720", "yahoo": "446720.KS" },
+    { "name": "ACE 주주환원가치주액티브", "code": "447430", "yahoo": "447430.KS" },
+    { "name": "ACE 테슬라벨류체인액티브", "code": "457480", "yahoo": "457480.KS" },
+    { "name": "KODEX CD금리액티브(합성)", "code": "459580", "yahoo": "459580.KS" },
+    { "name": "SOL 반도체전공정",        "code": "475300", "yahoo": "475300.KS" },
+    { "name": "KODEX 코리아밸류업",      "code": "495850", "yahoo": "495850.KS" },
+    { "name": "한화오션",               "code": "042660", "yahoo": "042660.KS" },
+    { "name": "엔비디아",               "code": "NVDA",   "yahoo": "NVDA", "currency": "USD" }
+  ]
+}
