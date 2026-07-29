@@ -1,0 +1,1970 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>연금계좌 ETF 투자계절 대시보드</title>
+<style>
+  :root{
+    color-scheme: light;
+    --surface-1:#fcfcfb; --page:#f9f9f7;
+    --ink-1:#0b0b0b; --ink-2:#52514e; --ink-3:#898781;
+    --grid:#e1e0d9; --axis:#c3c2b7; --ring:rgba(11,11,11,.10);
+    --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a;
+    --good:#0ca30c; --warn:#fab219; --serious:#ec835a; --crit:#d03b3b;
+    /* 텍스트용 — 라이트 표면에서 3:1 이상 확보 */
+    --good-ink:#006300; --warn-ink:#8a6100; --serious-ink:#b0532a; --crit-ink:#b32b2b;
+    --seq-100:#cde2fb; --seq-250:#86b6ef; --seq-450:#2a78d6; --seq-600:#184f95;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:where(:not([data-theme="light"])){
+      color-scheme: dark;
+      --surface-1:#1a1a19; --page:#0d0d0d;
+      --ink-1:#ffffff; --ink-2:#c3c2b7; --ink-3:#898781;
+      --grid:#2c2c2a; --axis:#383835; --ring:rgba(255,255,255,.10);
+      --s1:#3987e5; --s2:#d95926; --s3:#199e70;
+      --good-ink:#0ca30c; --warn-ink:#fab219; --serious-ink:#ec835a; --crit-ink:#e66767;
+      --seq-100:#0d366b; --seq-250:#184f95; --seq-450:#3987e5; --seq-600:#86b6ef;
+    }
+  }
+  :root[data-theme="dark"]{
+    color-scheme: dark;
+    --surface-1:#1a1a19; --page:#0d0d0d;
+    --ink-1:#ffffff; --ink-2:#c3c2b7; --ink-3:#898781;
+    --grid:#2c2c2a; --axis:#383835; --ring:rgba(255,255,255,.10);
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70;
+    --good-ink:#0ca30c; --warn-ink:#fab219; --serious-ink:#ec835a; --crit-ink:#e66767;
+    --seq-100:#0d366b; --seq-250:#184f95; --seq-450:#3987e5; --seq-600:#86b6ef;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--page); color:var(--ink-1);
+    font-family: system-ui,-apple-system,"Segoe UI","Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif;
+    font-size:15px; line-height:1.55; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1120px; margin:0 auto; padding:28px 20px 80px}
+  header{display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:6px}
+  h1{font-size:22px; margin:0 0 4px; letter-spacing:-.01em}
+  .sub{color:var(--ink-2); font-size:13.5px; margin:0}
+  .btn{
+    background:var(--surface-1); border:1px solid var(--ring); color:var(--ink-2);
+    border-radius:8px; padding:7px 12px; font:inherit; font-size:13px; cursor:pointer;
+  }
+  .btn:hover{border-color:var(--axis)}
+  .card{
+    background:var(--surface-1); border:1px solid var(--ring); border-radius:14px;
+    padding:18px 20px; margin-top:16px;
+  }
+  .card h2{font-size:15px; margin:0 0 2px; letter-spacing:-.01em}
+  .card .hint{font-size:12.5px; color:var(--ink-3); margin:0 0 14px}
+
+  /* ---- status bar ---- */
+  #statusbar{display:flex; flex-wrap:wrap; gap:6px; margin-top:14px}
+  .chip{
+    display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--ink-2);
+    background:var(--surface-1); border:1px solid var(--ring); border-radius:999px; padding:4px 10px;
+  }
+  .dot{width:7px;height:7px;border-radius:50%;flex:none}
+  .dot.live{background:var(--good)} .dot.snap{background:var(--warn)} .dot.wait{background:var(--ink-3)}
+
+  /* ---- hero ---- */
+  #hero{display:grid; grid-template-columns: minmax(0,1fr) minmax(0,1.25fr); gap:26px; align-items:center}
+  @media(max-width:760px){ #hero{grid-template-columns:1fr} }
+  .season-emoji{font-size:40px; line-height:1}
+  .season-name{font-size:30px; font-weight:650; letter-spacing:-.02em; margin:6px 0 2px}
+  .season-do{font-size:15px; color:var(--ink-2); margin:0}
+  .meter{margin-top:4px}
+  .meter-track{position:relative; height:14px; display:flex; gap:2px}
+  .meter-track span{flex:1; border-radius:3px}
+  .meter-track span:first-child{border-radius:7px 3px 3px 7px}
+  .meter-track span:last-child{border-radius:3px 7px 7px 3px}
+  .meter-mark{position:absolute; top:-6px; width:3px; height:26px; background:var(--ink-1); border-radius:2px;
+              box-shadow:0 0 0 2px var(--surface-1); transition:left .5s ease}
+  .meter-scale{display:flex; justify-content:space-between; font-size:11.5px; color:var(--ink-3); margin-top:7px}
+  .score-big{font-size:44px; font-weight:650; letter-spacing:-.03em; font-variant-numeric:tabular-nums}
+  .score-unit{font-size:15px; color:var(--ink-3); font-weight:400}
+
+  /* ---- axis cards ---- */
+  .axes{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-top:16px}
+  @media(max-width:900px){ .axes{grid-template-columns:repeat(2,minmax(0,1fr))} }
+  @media(max-width:520px){ .axes{grid-template-columns:1fr} }
+  .axis{background:var(--surface-1); border:1px solid var(--ring); border-radius:14px; padding:16px 16px 14px}
+  .axis .label{font-size:12.5px; color:var(--ink-3); margin:0 0 8px; display:flex; justify-content:space-between; align-items:center}
+  .axis .val{font-size:26px; font-weight:600; letter-spacing:-.02em; font-variant-numeric:tabular-nums; line-height:1.15}
+  .axis .val small{font-size:13px; font-weight:400; color:var(--ink-3)}
+  .axis .verdict{font-size:13px; font-weight:600; margin:8px 0 6px; display:flex; align-items:center; gap:6px}
+  .axis .why{font-size:12.5px; color:var(--ink-2); margin:0}
+  .axis .rows{margin-top:10px; border-top:1px solid var(--grid); padding-top:9px}
+  .axis .rows div{display:flex; justify-content:space-between; font-size:12px; color:var(--ink-2); padding:1.5px 0}
+  .axis .rows b{font-weight:600; font-variant-numeric:tabular-nums; color:var(--ink-1)}
+
+  /* ---- chart ---- */
+  #fxchart-box{position:relative}
+  svg{display:block; width:100%; height:auto; overflow:visible}
+  .gridline{stroke:var(--grid); stroke-width:1}
+  .baseline{stroke:var(--axis); stroke-width:1}
+  .tick{fill:var(--ink-3); font-size:11px}
+  .band{fill:var(--seq-100); opacity:.45}
+  .tip{
+    position:absolute; pointer-events:none; opacity:0; transition:opacity .12s;
+    background:var(--surface-1); border:1px solid var(--ring); border-radius:9px;
+    padding:7px 10px; font-size:12.5px; color:var(--ink-1); white-space:nowrap;
+    box-shadow:0 4px 14px rgba(0,0,0,.13); z-index:5;
+  }
+  .tip b{font-variant-numeric:tabular-nums}
+
+  /* ---- table ---- */
+  .filters{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px}
+  .fbtn{
+    background:transparent; border:1px solid var(--ring); color:var(--ink-2);
+    border-radius:999px; padding:5px 12px; font:inherit; font-size:12.5px; cursor:pointer;
+  }
+  .fbtn[aria-pressed="true"]{background:var(--ink-1); color:var(--surface-1); border-color:var(--ink-1)}
+  .tblwrap{overflow-x:auto; margin:0 -20px; padding:0 20px}
+  table{border-collapse:collapse; width:100%; font-size:13px; min-width:820px}
+  th,td{text-align:left; padding:9px 10px; border-bottom:1px solid var(--grid); vertical-align:top}
+  th{font-size:11.5px; color:var(--ink-3); font-weight:600; white-space:nowrap; border-bottom:1px solid var(--axis)}
+  th.sortable{cursor:pointer; user-select:none}
+  th.sortable:hover{color:var(--ink-1)}
+  th.sortable::after{content:"⇅"; opacity:.35; margin-left:4px; font-size:10px}
+  th.sortable[aria-sort="descending"]::after{content:"▼"; opacity:1}
+  th.sortable[aria-sort="ascending"]::after{content:"▲"; opacity:1}
+  th.sortable[aria-sort]{color:var(--ink-1)}
+  td.num,th.num{text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap}
+  tbody tr:hover{background:color-mix(in srgb, var(--ink-1) 4%, transparent)}
+  .nm{font-weight:600}
+  .code{font-size:11.5px; color:var(--ink-3); font-variant-numeric:tabular-nums}
+  .sig{display:inline-flex; align-items:center; gap:6px; font-weight:600; font-size:12.5px; white-space:nowrap}
+  .note{font-size:11.5px; color:var(--ink-3); margin-top:3px; max-width:290px; line-height:1.45}
+  .tag{display:inline-block; font-size:10.5px; border:1px solid var(--ring); color:var(--ink-3);
+       border-radius:5px; padding:1px 5px; margin-right:4px; white-space:nowrap}
+  .tag.safe{border-color:var(--good); color:var(--good)}
+  .tag.warnt{border-color:var(--serious); color:var(--serious)}
+
+  /* ---- 산업군 카드 ---- */
+  .secgrid{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px}
+  @media(max-width:820px){ .secgrid{grid-template-columns:1fr} }
+  .sec{border:1px solid var(--ring); border-radius:12px; padding:14px 15px; background:var(--surface-1)}
+  .sec.dim{opacity:.72}
+  .sec-head{display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:9px}
+  .sec-name{font-size:15px; font-weight:650; letter-spacing:-.01em}
+  .sec-type{display:inline-block; font-size:10.5px; border:1px solid var(--ring); color:var(--ink-3);
+            border-radius:5px; padding:1px 6px; margin-left:6px; vertical-align:1.5px; white-space:nowrap}
+  .sec-metrics{display:flex; gap:16px; flex-wrap:wrap; border-top:1px solid var(--grid);
+               border-bottom:1px solid var(--grid); padding:8px 0; margin-bottom:9px}
+  .sec-metrics div{font-size:11.5px; color:var(--ink-3); line-height:1.3}
+  .sec-metrics b{display:block; font-size:15px; color:var(--ink-1); font-variant-numeric:tabular-nums; font-weight:600}
+  .sec-rule{font-size:12.5px; color:var(--ink-2); margin:0 0 7px}
+  .sec-caution{font-size:12px; color:var(--serious-ink); margin:0 0 9px}
+  .sec-none{font-size:12.5px; color:var(--crit-ink); font-weight:600; margin:0 0 7px}
+  .sec-etfs{width:100%; min-width:0; border-collapse:collapse; font-size:12px}
+  .sec-etfs td{padding:4px 0; border:0; vertical-align:baseline}
+  .sec-etfs td:first-child{padding-right:8px}
+  .sec-etfs .e-aum{text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; color:var(--ink-2)}
+  .sec-etfs .e-ter{text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; color:var(--ink-3); width:46px}
+  .mkt{display:inline-block; font-size:10px; border-radius:4px; padding:0 4px; margin-right:5px;
+       border:1px solid var(--ring); color:var(--ink-3)}
+  .best{font-size:10.5px; color:var(--good-ink); font-weight:600; margin-left:5px}
+
+  /* ---- 포트폴리오 입력 ---- */
+  .pf-row{display:flex; gap:8px; align-items:center; margin-bottom:7px; flex-wrap:wrap}
+  .pf-row select{flex:1 1 320px; min-width:0}
+  .pf-row select, .pf-row input{
+    background:var(--surface-1); color:var(--ink-1); border:1px solid var(--ring);
+    border-radius:8px; padding:7px 10px; font:inherit; font-size:13px;
+  }
+  .pf-row input{width:110px; text-align:right; font-variant-numeric:tabular-nums}
+  .pf-row .del{border:1px solid var(--ring); background:transparent; color:var(--ink-3);
+               border-radius:8px; width:32px; height:34px; cursor:pointer; font-size:15px; line-height:1}
+  .pf-row .del:hover{color:var(--crit-ink); border-color:var(--crit)}
+  .kpi{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-bottom:14px}
+  @media(max-width:760px){ .kpi{grid-template-columns:repeat(2,minmax(0,1fr))} }
+  .kpi > div{border:1px solid var(--ring); border-radius:11px; padding:12px 14px}
+  .kpi span{display:block; font-size:11.5px; color:var(--ink-3)}
+  .kpi b{display:block; font-size:22px; font-weight:650; letter-spacing:-.02em; font-variant-numeric:tabular-nums; margin-top:2px}
+  .kpi em{display:block; font-size:11.5px; font-style:normal; color:var(--ink-2); margin-top:3px}
+  .alert{border-radius:10px; padding:11px 13px; font-size:13px; margin-top:12px; line-height:1.5}
+  .alert.bad{background:color-mix(in srgb, var(--crit) 11%, transparent); color:var(--ink-1)}
+  .alert.warn{background:color-mix(in srgb, var(--warn) 15%, transparent); color:var(--ink-1)}
+  .alert.ok{background:color-mix(in srgb, var(--good) 11%, transparent); color:var(--ink-1)}
+  /* 룩스루 막대 */
+  .lt{display:grid; grid-template-columns:minmax(120px,1.1fr) minmax(0,3fr) 62px; gap:10px;
+      align-items:center; font-size:12.5px; padding:3px 0}
+  .lt .bar{height:14px; border-radius:3px; background:var(--seq-450); min-width:2px}
+  .lt .bar.hi{background:var(--crit)}
+  .lt .pct{text-align:right; font-variant-numeric:tabular-nums; color:var(--ink-2)}
+  .lt .src{font-size:11px; color:var(--ink-3)}
+  /* 분할매수 스케줄 */
+  .sched{display:grid; grid-template-columns:repeat(auto-fill,minmax(112px,1fr)); gap:7px; margin-top:12px}
+  .sched button{
+    border:1px solid var(--ring); background:transparent; color:var(--ink-2); border-radius:9px;
+    padding:8px 6px; font:inherit; font-size:12px; cursor:pointer; text-align:left; line-height:1.35;
+  }
+  .sched button:hover{border-color:var(--axis)}
+  .sched button[aria-pressed="true"]{background:color-mix(in srgb,var(--good) 14%,transparent);
+    border-color:var(--good); color:var(--ink-1)}
+  .sched b{display:block; font-size:13px; color:var(--ink-1); font-variant-numeric:tabular-nums}
+  .sched .chk{float:right; color:var(--good-ink); font-weight:700}
+  .prog{height:8px; border-radius:4px; background:var(--grid); overflow:hidden; margin:10px 0 4px}
+  .prog i{display:block; height:100%; background:var(--seq-450); border-radius:4px; transition:width .3s}
+
+  /* 범례 */
+  .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:12.5px; color:var(--ink-2); margin-bottom:10px}
+  .legend i{display:inline-block; width:14px; height:3px; border-radius:2px; margin-right:6px; vertical-align:3px}
+
+  ul.notes{margin:8px 0 0; padding-left:18px; font-size:13px; color:var(--ink-2)}
+  ul.notes li{margin-bottom:6px}
+  .disclaimer{font-size:12px; color:var(--ink-3); margin-top:22px; line-height:1.6;
+              border-top:1px solid var(--grid); padding-top:14px}
+  a{color:var(--s1)}
+  details summary{cursor:pointer; font-size:13px; color:var(--ink-2); font-weight:600}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div>
+    <h1>연금계좌 ETF 투자계절 대시보드</h1>
+    <p class="sub">연금저축·IRP에서 실제 매수 가능한 <b>국내상장 ETF만</b> (한국거래소 상장 · 국내 운용사 상품) · 시장 4축 판정 + 15개 산업군 지도</p>
+  </div>
+  <div style="display:flex; gap:8px">
+    <button class="btn" id="refresh">↻ 새로고침</button>
+    <button class="btn" id="share" title="포트폴리오·분할매수 설정을 뺀 깨끗한 주소를 복사합니다">🔗 공유용 링크</button>
+    <button class="btn" id="theme">◐ 테마</button>
+  </div>
+</header>
+
+<div id="statusbar"></div>
+
+<div class="card" id="hero-card">
+  <div id="hero">
+    <div>
+      <div class="season-emoji" id="s-emoji">…</div>
+      <div class="season-name" id="s-name">계산 중</div>
+      <p class="season-do" id="s-do">데이터를 불러오는 중입니다.</p>
+    </div>
+    <div>
+      <div style="display:flex; align-items:baseline; gap:8px; margin-bottom:12px">
+        <span class="score-big" id="s-score">–</span>
+        <span class="score-unit">/ 100 &nbsp;미국·글로벌 매수 우호도</span>
+      </div>
+      <div class="meter">
+        <div class="meter-track" id="meter-track">
+          <span style="background:var(--crit);flex-grow:36"></span>
+          <span style="background:var(--serious);flex-grow:16"></span>
+          <span style="background:var(--warn);flex-grow:16"></span>
+          <span style="background:var(--good);flex-grow:32"></span>
+        </div>
+        <div class="meter-mark" id="meter-mark" style="left:0%"></div>
+        <div class="meter-scale">
+          <span>0 과열·관망</span><span>36</span><span>52</span><span>68</span><span>100 공포·적극매수</span>
+        </div>
+      </div>
+      <p class="sub" id="s-summary" style="margin-top:14px"></p>
+    </div>
+  </div>
+</div>
+
+<div class="axes" id="axes"></div>
+
+<div class="card" id="kr-card">
+  <h2>한국 시장 — 코스피 <span id="kr-src" style="font-weight:400;font-size:11.5px;color:var(--ink-3)"></span></h2>
+  <p class="hint">
+    위 4축은 <b>미국·글로벌</b> 기준입니다. 연금계좌에서 사는 KODEX 200·반도체·은행 같은 <b>국내 ETF</b>는
+    코스피가 결정하므로 따로 봅니다. 두 시장이 정반대로 움직이는 국면이 실제로 자주 있습니다.
+  </p>
+  <div id="kr-body"></div>
+</div>
+
+<div class="card">
+  <h2>원/달러 환율 밴드 <span id="fx-src" style="font-weight:400;font-size:11.5px;color:var(--ink-3)"></span></h2>
+  <p class="hint">최근 3년 일별 종가. 음영은 3년 <b>25~75 백분위</b> 구간 — 선이 음영 아래면 원화 강세(달러 자산을 싸게 사는 구간), 위면 원화 약세.</p>
+  <div id="fxchart-box">
+    <div id="fxchart"></div>
+    <div class="tip" id="fxtip"></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>산업군 지도 — 지금 어느 산업을 담을 때인가</h2>
+  <p class="hint">
+    산업군마다 <b>사는 이유가 다릅니다.</b> 구조적 성장 섹터는 <b>떨어질 때</b> 나눠 담고, 경기방어 섹터는 <b>경기가 꺾일 때</b> 담고,
+    금리민감 섹터는 <b>금리 방향</b>을 보고 담습니다. 아래 신호는 그 성격 + 현재 낙폭 + 매크로 국면을 합쳐 계산합니다.
+    낙폭·200일선은 가능한 경우 <b>미국 동종 섹터 ETF를 대용 지표로 실시간 계산</b>합니다.
+  </p>
+  <div class="alert warn" style="margin-bottom:14px">⚠ <b>한국 산업군의 낙폭·모멘텀 수치는 7/28~29 폭락 이전 스냅샷입니다.</b>
+    코스피가 이틀 만에 6/22 고점 대비 -38% 수준까지 밀렸으므로, <b>국내 섹터의 실제 낙폭은 표시된 값보다 훨씬 큽니다.</b>
+    ● 표시가 붙은 항목(미국 동종 섹터 대용)만 실시간입니다.</div>
+  <div class="filters" id="secfilters"></div>
+  <div class="secgrid" id="secgrid"></div>
+  <p class="note" style="max-width:none; margin-top:14px">
+    표시된 ETF는 전부 <b>한국거래소 상장 · 국내 운용사 상품</b>이라 연금저축·IRP에서 그대로 매수할 수 있습니다.
+    레버리지·인버스는 애초에 목록에서 제외했고, 순자산 500억 미만은 유동성 문제로 「규모 미달」로 따로 표시합니다.
+  </p>
+</div>
+
+<div class="card">
+  <h2>코어 자산 — 지수 · 배당 · 채권 · 금</h2>
+  <p class="hint">연금 포트폴리오의 뼈대가 되는 종목들. 산업군·테마 ETF는 아래 「산업군 지도」에서 따로 봅니다.</p>
+  <div class="filters" id="filters"></div>
+  <div class="tblwrap">
+    <table>
+      <thead><tr>
+        <th>종목명</th>
+        <th class="num sortable" data-k="aum">순자산</th>
+        <th class="num sortable" data-k="ter">보수</th>
+        <th>환</th>
+        <th class="sortable" data-k="score">오늘의 신호</th>
+        <th>왜 / 주의</th>
+      </tr></thead>
+      <tbody id="etfbody"></tbody>
+    </table>
+  </div>
+  <p class="note" style="max-width:none; margin-top:12px">
+    순자산·보수는 2026년 7월 중순~하순 공시 기준 스냅샷입니다(자동 갱신 대상 아님). 보수는 기타비용·중개수수료를 포함한 <b>실부담비용률(TER)</b>이 있으면 그 값을 씁니다.
+  </p>
+</div>
+
+<div class="card">
+  <h2>내 포트폴리오 <span style="font-weight:400;font-size:11.5px;color:var(--ink-3)">· 입력하면 주소창에 저장돼서 다음에 열 때 그대로 뜹니다</span></h2>
+  <p class="hint">보유 중인 ETF와 평가금액(만원)을 넣으면 ① 위험자산 비중이 신호 대비 적정한지 ② 여러 ETF에 걸쳐 <b>같은 종목에 얼마나 몰려 있는지</b>를 계산합니다.</p>
+  <div id="pf-rows"></div>
+  <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px">
+    <button class="btn" id="pf-add">+ 종목 추가</button>
+    <button class="btn" id="pf-clear">전체 지우기</button>
+    <button class="btn" id="pf-demo">예시 채우기</button>
+  </div>
+  <div id="pf-result" style="margin-top:18px"></div>
+</div>
+
+<div class="card" id="dca-card">
+  <h2>분할매수 플래너 <span style="font-weight:400;font-size:11.5px;color:var(--ink-3)">· 설정은 주소창에 함께 저장됩니다</span></h2>
+  <p class="hint">
+    바닥은 아무도 모릅니다. 그래서 <b>지금 시작하되, 실탄을 다 쓰지 않는 것</b>이 핵심입니다.
+    총액의 일부를 <b>가속 예비</b>로 남겨뒀다가 지수가 장기평균보다 확실히 싸질 때만 더 넣습니다.
+  </p>
+  <div class="pf-row" style="margin-bottom:12px">
+    <label style="font-size:13px;color:var(--ink-2)">총 투자액
+      <input type="number" id="dca-total" min="0" step="100" value="1200" style="margin-left:6px"> 만원</label>
+    <label style="font-size:13px;color:var(--ink-2);margin-left:10px">기간
+      <input type="number" id="dca-months" min="2" max="36" step="1" value="10" style="margin-left:6px;width:70px"> 개월</label>
+    <label style="font-size:13px;color:var(--ink-2);margin-left:10px">기준 시장
+      <select id="dca-mkt" style="margin-left:6px;flex:0 0 auto">
+        <option value="kr">한국 (코스피)</option>
+        <option value="us">미국 (S&amp;P500)</option>
+      </select></label>
+  </div>
+  <div id="dca-result"></div>
+</div>
+
+<div class="card" id="ov-card">
+  <h2>중복 노출 진단 — 실제로는 몇 개 종목에 몰려 있나</h2>
+  <p class="hint">
+    보유 ETF의 구성종목을 <b>룩스루(look-through)</b>해서 합칩니다. ETF 4개에 나눠 담아 분산된 것 같아도
+    실제로는 같은 회사 몇 개에 절반이 몰려 있는 경우가 흔합니다.
+  </p>
+  <div id="ov-result"></div>
+</div>
+
+<div class="card">
+  <h2>신호 백테스트 — 이 신호가 무지성 적립보다 나았나</h2>
+  <p class="hint">
+    가장 중요한 검증입니다. 매달 같은 금액을 기계적으로 넣은 경우와, 이 대시보드 신호에 따라 금액을 조절한 경우를
+    과거 데이터로 비교합니다. <b>신호가 못 이기면 이 대시보드는 정교해질 게 아니라 단순해져야 합니다.</b>
+    브라우저에서 과거 시세를 직접 받아 계산하므로 처음 열 때 몇 초 걸립니다.
+  </p>
+  <button class="btn" id="bt-run" style="margin:4px 0 6px">▶ 백테스트 돌리기</button>
+  <div id="bt-status" class="sub" style="padding:8px 0">
+    이 항목만 과거 시세(S&P500·VIX·원달러 15년치)를 <b>브라우저에서 직접</b> 받아옵니다.
+    데이터 파이프라인을 연결해 두셨더라도 이 버튼을 누를 때만 별도로 호출합니다.
+  </div>
+  <div id="bt-result" style="display:none">
+    <div id="bt-chart-box" style="position:relative; margin-bottom:14px">
+      <div id="bt-chart"></div><div class="tip" id="bt-tip"></div>
+    </div>
+    <div class="tblwrap">
+      <table style="min-width:640px">
+        <thead><tr><th>전략</th><th class="num">최종 평가액</th><th class="num">총 투입</th>
+          <th class="num">수익률</th><th class="num">연환산</th><th class="num">최대낙폭</th><th>설명</th></tr></thead>
+        <tbody id="bt-body"></tbody>
+      </table>
+    </div>
+    <p id="bt-verdict" style="font-size:13.5px; margin:16px 0 0; padding:12px 14px; border-radius:10px;
+       background:color-mix(in srgb, var(--ink-1) 4%, transparent)"></p>
+    <p class="note" style="max-width:none; margin-top:12px">
+      ⚠ <b>이 백테스트의 한계를 분명히 밝힙니다.</b> 대시보드가 쓰는 4축 중 <b>공포탐욕지수와 선행 P/E는 과거 시계열을
+      무료로 구할 수 없어 백테스트에서 빠졌습니다.</b> 즉 여기서 검증되는 건 <b>VIX · 고점대비 낙폭 · 200일선 · 환율 백분위</b>
+      네 가지로 재구성한 <i>축소판 신호</i>입니다. 또한 세금·거래비용·ETF 추적오차를 반영하지 않았고,
+      미투자 현금은 연 2.5%(CD금리 근사)로 굴러간다고 가정했습니다. 과거 성과가 미래를 보장하지 않습니다.
+    </p>
+  </div>
+</div>
+
+<div class="card">
+  <h2>연금계좌에서 꼭 기억할 것</h2>
+  <ul class="notes">
+    <li><b>레버리지·인버스 ETF는 연금저축·IRP 모두 매수 불가</b>입니다. (예: KODEX 레버리지, TIGER 미국나스닥100레버리지(합성))</li>
+    <li><b>IRP·DC는 위험자산 70% 한도</b>가 있습니다(근로자퇴직급여보장법 시행규칙 제10조). 주식형 ETF는 최대 70%까지, 나머지 30%는 채권형·원리금보장 등 안전자산으로 채워야 합니다. <b>연금저축계좌에는 이 한도가 없어 100% 주식형이 가능합니다.</b></li>
+    <li><b>금 ETF는 유형이 갈립니다.</b> 금<b>현물</b> ETF(ACE·TIGER KRX금현물)는 연금저축·IRP 모두 가능하지만, 금<b>선물</b> ETF(KODEX 골드선물(H) 등)는 파생상품 위험평가액 40% 초과로 <b>IRP·DC 매수 불가</b>입니다.</li>
+    <li><b>미국 상장 ETF(QQQ, VOO, SCHD)는 연금계좌에서 직접 살 수 없습니다.</b> 국내상장 ETF만 가능해, 이 표는 전부 국내상장 종목입니다.</li>
+    <li><b>미국 은행/금융 섹터 ETF는 국내에 사실상 없습니다.</b> 가장 큰 KODEX 미국S&P500금융도 순자산 463억원 수준이라 유동성 리스크가 있습니다. 이름에 '은행·금융'이 붙은 대형 ETF는 전부 <b>국내 은행주</b>입니다.</li>
+    <li>총보수만 보면 0.005%까지 내려가 있어 비교가 무의미합니다. 반드시 <b>TER(실부담비용률)</b>로 비교하세요. 환헤지형은 여기에 <b>연 0.3~0.5%의 헤지비용</b>이 TER 밖에서 수익률에 추가로 반영됩니다.</li>
+  </ul>
+</div>
+
+<details class="card">
+  <summary>판정 로직 — 어떻게 점수를 매기나</summary>
+  <ul class="notes" style="margin-top:12px">
+    <li><b>공포·과열 (가중 40%)</b> — VIX(기준 19), CNN 공포탐욕지수(기준 50), S&amp;P500·나스닥100의 고점 대비 낙폭(기준 -3%), 200일선 이격도(기준 +3%)를 각각 −2~+2로 환산해 평균. 값이 <b>클수록 공포 = 매수 우호</b>.</li>
+    <li><b>밸류에이션 (25%)</b> — S&amp;P500 12개월 선행 P/E를 10년 평균(19.0배)과 비교. 프리미엄 7.5%p마다 1점씩 차감.</li>
+    <li><b>환율 (20%)</b> — 최근 3년 원/달러 종가 분포에서 현재 값의 <b>백분위</b>. 백분위 50%를 중립으로, 20%p마다 1점. 낮을수록(원화 강세) 환노출 해외 ETF에 유리.</li>
+    <li><b>금리 (15%)</b> — 미국 10년물 금리 수준(4% 초과분은 주식 밸류에이션 부담)과 연준 방향성(인상 리스크 반영). 단, <b>장기채·은행·금 ETF에는 부호를 반대로</b> 적용합니다.</li>
+    <li>종목별 신호는 성격에 따라 가중치를 바꿉니다. 환헤지형은 환율 축을 빼고, 장기채는 금리 축을 주축으로, 국내 은행주는 <b>한국</b> 금리 방향을 씁니다.</li>
+    <li><b>산업군 신호는 성격마다 계산식이 다릅니다.</b>
+      ① <b>구조적 성장</b>(반도체·AI·전력인프라·소프트웨어) = 낙폭이 클수록 매수. 단 낙폭 효과는 체감 처리하고(40% 하락이 20% 하락의 2배로 좋은 자리는 아님),
+      200일선 <b>아래</b>면 아직 하락 추세이므로 감점합니다.
+      ② <b>경기방어</b>(필수소비재·유틸리티·헬스케어) = 침체 신호(10년-2년 금리차 평탄·역전)에 반응. 곡선이 정상이면 점수가 낮게 나옵니다.
+      ③ <b>경기민감</b>(조선·2차전지·자동차·에너지·소재) = 낙폭 + 침체 위험이 <b>낮을 때</b> 가점(회복 초입에 사는 섹터).
+      ④ <b>금리 상승 수혜</b>(은행) / <b>금리 하락 수혜</b>(리츠) = 현재 한국 금리 방향에 따라 정반대로 가감.
+      ⑤ <b>지정학</b>(방산) = 낙폭 위주.</li>
+    <li>산업군의 순자산 500억 미만 종목만 있는 경우, 점수와 무관하게 <b>「살 상품이 없음」</b>으로 표시합니다.</li>
+    <li>점수는 <b>0~100</b>으로 정규화됩니다. 68 이상 겨울(적극 매수) / 52~68 봄(분할 매수) / 36~52 여름(정기 적립 유지) / 36 미만 가을(신규 매수 신중).</li>
+  </ul>
+</details>
+
+<div class="disclaimer">
+  <b>데이터 출처</b> · 환율: Frankfurter(ECB 기준, 브라우저에서 직접 호출) · 지수·VIX·금: Stooq · 공포탐욕지수: CNN · 그 외 금리·밸류에이션·ETF 순자산: 2026-07-27 기준 수동 스냅샷.
+  자동 호출이 차단되면 스냅샷 값으로 자동 대체되며, 상단 배지에 <span class="chip" style="padding:1px 8px"><span class="dot snap"></span>스냅샷</span> 으로 표시됩니다.<br><br>
+  <b>면책</b> · 이 페이지는 공개 데이터를 규칙에 따라 기계적으로 요약한 <b>참고 자료</b>이며, 특정 종목의 매수·매도 권유가 아닙니다. 모든 투자 판단과 그 결과는 투자자 본인에게 귀속됩니다. 실제 매수 가능 여부·순자산·보수는 반드시 거래 증권사 화면과 운용사 공시로 최종 확인하시기 바랍니다.
+</div>
+
+</div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   1. 스냅샷 (자동 호출 실패 시 폴백) — 2026-07-27 기준
+   ============================================================ */
+const SNAP = {
+  asOf: "2026-07-27",
+  usdkrw:   { v:1461.0,  d:"2026-07-24" },
+  vix:      { v:17.05,   d:"2026-07-21" },
+  fng:      { v:39.4,    d:"2026-07-24" },
+  spx:      { v:7477.01, d:"2026-07-27" },
+  spxHigh:  7620.90,
+  spxMa200: 7002.37,
+  ndx:      { v:28454.81,d:"2026-07-23" },
+  ndxHigh:  30762.20,
+  ndxMa200: 26416.34,
+  gold:     { v:4091.15, d:"2026-07-27" },
+  goldHigh: 5608.35,
+  us10y:    { v:4.71,    d:"2026-07-23" },
+  us2y:     { v:4.37,    d:"2026-07-23" },
+  fedLow:3.50, fedHigh:3.75, fedDir:"동결(4회 연속) · 시장은 10월 25bp 인상 1회 반영",
+  krBase:   { v:2.75,    d:"2026-07-16" },
+  // 2026-07-28 -10.84%(서킷브레이커) → 07-29 이틀째 급락. 6/22 사상 최고 9,114.32
+  kospi:     { v:5600,   d:"2026-07-29" },
+  kospiHigh: 9114.32,
+  // 200일선: 2025-10~2026-07 월별 대표 수준으로 산출한 근사치. 실시간 수신 시 실측으로 대체됨
+  kospiMa200: 5850,
+  kospiMa200Est: true,
+  kospiPrevClose: 6023.66,   // 7/28 종가
+  krDir:    "인상 전환(2023-01 이후 첫 인상)",
+  fwdPE: 20.1, fwdPE10yAvg: 19.0, ndxPE: 31.49,
+  // 3년 환율 밴드 폴백 (연도별 고/저 실측 기반)
+  fxFallback: { p25:1355, p50:1425, p75:1495, min:1294.54, max:1562.47 }
+};
+
+/* ============================================================
+   1-B. (선택) 데이터 파이프라인 연동
+   GitHub Actions 등으로 매일 만들어 둔 JSON 주소를 넣으면
+   외부 API·프록시를 전혀 호출하지 않고 이 파일 하나만 읽습니다.
+   비워두면 기존처럼 브라우저가 직접 호출합니다.
+   ============================================================ */
+const DATA_URL = "";   // 예: "https://내아이디.github.io/etf-season/market.json"
+
+/* ============================================================
+   2. 네트워크 — 직접 → CORS 프록시 순으로 시도
+   ============================================================ */
+const PROXIES = [
+  u => u,
+  u => "https://corsproxy.io/?url=" + encodeURIComponent(u),
+  u => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u)
+];
+async function grab(url, ms){
+  ms = ms || 9000;
+  for (const p of PROXIES){
+    try{
+      const c = new AbortController();
+      const t = setTimeout(()=>c.abort(), ms);
+      const r = await fetch(p(url), {signal:c.signal, cache:"no-store"});
+      clearTimeout(t);
+      if(!r.ok) continue;
+      const txt = await r.text();
+      if(txt && txt.length > 8) return txt;
+    }catch(e){ /* 다음 경로 시도 */ }
+  }
+  return null;
+}
+const J = async (u) => { const t = await grab(u); if(!t) return null; try{ return JSON.parse(t); }catch(e){ return null; } };
+
+const iso = d => d.toISOString().slice(0,10);
+const daysAgo = n => { const d = new Date(); d.setDate(d.getDate()-n); return iso(d); };
+
+/* --- Stooq: 최근 종가 --- */
+async function stooqLast(sym){
+  const t = await grab("https://stooq.com/q/l/?s="+encodeURIComponent(sym)+"&f=sd2t2ohlc&h&e=csv");
+  if(!t) return null;
+  const rows = t.trim().split(/\r?\n/);
+  if(rows.length < 2) return null;
+  const c = rows[1].split(",");
+  const close = parseFloat(c[6]), date = c[1];
+  if(!isFinite(close) || close === 0) return null;
+  return { v: close, d: date };
+}
+/* --- Stooq: 일별 히스토리 --- */
+async function stooqDaily(sym, fromDays){
+  const d1 = daysAgo(fromDays).replace(/-/g,""), d2 = iso(new Date()).replace(/-/g,"");
+  const t = await grab("https://stooq.com/q/d/l/?s="+encodeURIComponent(sym)+"&d1="+d1+"&d2="+d2+"&i=d");
+  if(!t || !/^Date/i.test(t.trim())) return null;
+  const out = [];
+  t.trim().split(/\r?\n/).slice(1).forEach(line=>{
+    const p = line.split(",");
+    const c = parseFloat(p[4]);
+    if(p[0] && isFinite(c)) out.push({ d:p[0], c });
+  });
+  return out.length > 30 ? out : null;
+}
+
+/* ============================================================
+   3. 데이터 수집
+   ============================================================ */
+const SRC = {};                    // 지표별 live/snap 상태
+const mark = (k, live) => { SRC[k] = live ? "live" : "snap"; };
+
+const D = {};                      // 최종 지표 저장소
+
+async function loadFX(){
+  const cur = await J("https://api.frankfurter.dev/v1/latest?base=USD&symbols=KRW");
+  if (cur && cur.rates && cur.rates.KRW){
+    D.usdkrw = { v: cur.rates.KRW, d: cur.date }; mark("fx", true);
+  } else { D.usdkrw = SNAP.usdkrw; mark("fx", false); }
+
+  const ser = await J("https://api.frankfurter.dev/v1/"+daysAgo(1095)+".."+"?base=USD&symbols=KRW");
+  if (ser && ser.rates){
+    const arr = Object.keys(ser.rates).sort().map(k => ({ d:k, c: ser.rates[k].KRW }))
+                      .filter(x => isFinite(x.c));
+    if (arr.length > 200){ D.fxSeries = arr; mark("fxband", true); return; }
+  }
+  D.fxSeries = null; mark("fxband", false);
+}
+
+async function loadIndex(){
+  const [spxH, ndxH] = await Promise.all([ stooqDaily("^spx", 500), stooqDaily("^ndx", 500) ]);
+
+  if (spxH){
+    const last = spxH[spxH.length-1];
+    D.spx = { v:last.c, d:last.d };
+    D.spxHigh  = Math.max.apply(null, spxH.slice(-260).map(x=>x.c));
+    D.spxMa200 = avg(spxH.slice(-200).map(x=>x.c));
+    mark("spx", true);
+  } else {
+    D.spx = SNAP.spx; D.spxHigh = SNAP.spxHigh; D.spxMa200 = SNAP.spxMa200; mark("spx", false);
+  }
+  if (ndxH){
+    const last = ndxH[ndxH.length-1];
+    D.ndx = { v:last.c, d:last.d };
+    D.ndxHigh  = Math.max.apply(null, ndxH.slice(-260).map(x=>x.c));
+    D.ndxMa200 = avg(ndxH.slice(-200).map(x=>x.c));
+    mark("ndx", true);
+  } else {
+    D.ndx = SNAP.ndx; D.ndxHigh = SNAP.ndxHigh; D.ndxMa200 = SNAP.ndxMa200; mark("ndx", false);
+  }
+}
+
+async function loadKospi(){
+  // stooq의 코스피 심볼 표기가 확실치 않아 후보를 순서대로 시도한다
+  let h = null, used = null;
+  for (const sym of ["^kospi", "^kos", "kospi", "^ks11"]){
+    h = await stooqDaily(sym, 500);
+    if (h){ used = sym; break; }
+  }
+  D.kospiSym = used;
+  if (h){
+    D.kospiMa200Est = false;
+    const last = h[h.length-1];
+    D.kospi = { v:last.c, d:last.d };
+    D.kospiHigh  = Math.max.apply(null, h.slice(-260).map(x=>x.c));
+    D.kospiMa200 = avg(h.slice(-200).map(x=>x.c));
+    mark("kospi", true);
+  } else {
+    D.kospi = SNAP.kospi; D.kospiHigh = SNAP.kospiHigh; D.kospiMa200 = SNAP.kospiMa200;
+    D.kospiMa200Est = true; mark("kospi", false);
+  }
+}
+
+async function loadVix(){
+  const q = await stooqLast("^vix");
+  if (q && q.v > 5 && q.v < 100){ D.vix = q; mark("vix", true); }
+  else { D.vix = SNAP.vix; mark("vix", false); }
+}
+async function loadGold(){
+  const q = await stooqLast("xauusd");
+  if (q && q.v > 500){ D.gold = q; mark("gold", true); }
+  else { D.gold = SNAP.gold; mark("gold", false); }
+  D.goldHigh = SNAP.goldHigh;
+}
+async function loadRates(){
+  const q = await stooqLast("10usy.b");
+  if (q && q.v > 0.5 && q.v < 15){ D.us10y = q; mark("us10y", true); }
+  else { D.us10y = SNAP.us10y; mark("us10y", false); }
+  D.us2y = SNAP.us2y;
+  D.fedLow = SNAP.fedLow; D.fedHigh = SNAP.fedHigh; D.fedDir = SNAP.fedDir;
+  D.krBase = SNAP.krBase; D.krDir = SNAP.krDir;
+}
+async function loadFng(){
+  const j = await J("https://production.dataviz.cnn.io/index/fearandgreed/graphdata/"+daysAgo(10));
+  const fg = j && j.fear_and_greed;
+  const s = fg && Number(fg.score);
+  if (fg && Number.isFinite(s) && s > 0 && s <= 100){
+    D.fng = { v: s, d: fg.timestamp ? String(fg.timestamp).slice(0,10) : iso(new Date()) };
+    mark("fng", true);
+  } else { D.fng = SNAP.fng; mark("fng", false); }
+}
+
+/* ============================================================
+   4. 계산
+   ============================================================ */
+const avg = a => a.reduce((x,y)=>x+y,0)/a.length;
+const clamp = (x,a,b) => Math.max(a, Math.min(b, x));
+const pctRank = (arr, v) => arr.filter(x => x <= v).length / arr.length * 100;
+const quantile = (sorted, q) => {
+  const i = (sorted.length-1)*q, lo = Math.floor(i), hi = Math.ceil(i);
+  return sorted[lo] + (sorted[hi]-sorted[lo])*(i-lo);
+};
+
+function computeAxes(){
+  const A = {};
+
+  /* --- 공포·과열 --- */
+  const vixS  = clamp((D.vix.v - 19) / 6, -2, 2);
+  const fngS  = clamp((50 - D.fng.v) / 12.5, -2, 2);
+  const spxDD = (D.spxHigh - D.spx.v) / D.spxHigh * 100;
+  const ndxDD = (D.ndxHigh - D.ndx.v) / D.ndxHigh * 100;
+  const ddS   = clamp((avg([spxDD, ndxDD]) - 3) / 6, -2, 2);
+  const spx200 = (D.spx.v / D.spxMa200 - 1) * 100;
+  const ndx200 = (D.ndx.v / D.ndxMa200 - 1) * 100;
+  const maS   = clamp(-(avg([spx200, ndx200]) - 3) / 6, -2, 2);
+  A.fear = { s: avg([vixS, fngS, ddS, maS]), spxDD, ndxDD, spx200, ndx200 };
+
+  /* --- 밸류에이션 --- */
+  const prem = (SNAP.fwdPE / SNAP.fwdPE10yAvg - 1) * 100;
+  A.val = { s: clamp(-prem / 7.5, -2, 2), prem };
+
+  /* --- 환율 --- */
+  let pr, p25, p75;
+  if (D.fxSeries){
+    const closes = D.fxSeries.map(x=>x.c), sorted = closes.slice().sort((a,b)=>a-b);
+    pr = pctRank(closes, D.usdkrw.v); p25 = quantile(sorted,.25); p75 = quantile(sorted,.75);
+  } else {
+    const f = SNAP.fxFallback;
+    pr = clamp((D.usdkrw.v - f.min) / (f.max - f.min) * 100, 0, 100);
+    p25 = f.p25; p75 = f.p75;
+  }
+  A.fx = { s: clamp((50 - pr) / 20, -2, 2), pct: pr, p25, p75 };
+
+  /* --- 금리 (주식 기준: 고금리 = 역풍) --- */
+  const lvl = clamp(-(D.us10y.v - 4.0) / 0.7, -2, 2);
+  const dirPenalty = -0.5;                       // 인상 리스크 반영
+  A.rate = {
+    s: clamp(lvl + dirPenalty, -2, 2),
+    bondS: clamp((D.us10y.v - 4.0) / 0.5, -2, 2) - 0.5,   // 장기채: 금리 높을수록 매수 우호, 인상리스크 차감
+    spread: D.us10y.v - D.us2y.v,
+    krHike: 1.5                                            // 한국 인상 전환 → 은행주 우호
+  };
+
+  /* --- 한국 시장 (독립 축) --- */
+  const kDD  = (D.kospiHigh - D.kospi.v) / D.kospiHigh * 100;
+  const kP200 = (D.kospiMa200 == null) ? null : (D.kospi.v / D.kospiMa200 - 1) * 100;
+  // 폭등 뒤의 낙폭은 '싸다'는 뜻이 아니다.
+  // 고점 대비 낙폭(kDD)은 '기회의 크기', 200일선 대비 위치(kP200)는 '실제로 싼가'를 나타낸다.
+  // 거품이 꺼지는 국면에서는 후자가 훨씬 정직하므로 200일선에 더 큰 가중을 둔다.
+  const kSat = 1 - Math.exp(-Math.max(0,kDD)/25);
+  let kScore, kNote;
+  if (kP200 == null){
+    kScore = clamp(50 + 12*kSat, 0, 60);
+    kNote = "trendUnknown";
+  } else {
+    kScore = clamp(52 - clamp(kP200,-35,35)*1.3 + 12*kSat, 0, 100);
+    kNote = kP200 > 5 ? "above" : kP200 > -10 ? "near" : kP200 > -20 ? "below" : "deep";
+  }
+  A.kr = { dd:kDD, p200:kP200, score:clamp(kScore,0,100), note:kNote,
+           hikeHeadwind: 1.5 };
+
+  /* --- 종합 (미국·글로벌 기준) --- */
+  const comp = 0.40*A.fear.s + 0.25*A.val.s + 0.20*A.fx.s + 0.15*A.rate.s;
+  A.composite = comp;
+  A.score = clamp((comp + 2) / 4 * 100, 0, 100);
+  return A;
+}
+
+function season(score){
+  if (score >= 68) return { e:"❄️", n:"겨울", do_:"공포의 바닥권입니다. 미뤄둔 현금을 적극적으로 투입할 구간.", c:"var(--good-ink)" };
+  if (score >= 52) return { e:"🌱", n:"봄",   do_:"회복 초입입니다. 분할 매수 비중을 평소보다 늘려도 좋은 구간.", c:"var(--warn-ink)" };
+  if (score >= 36) return { e:"☀️", n:"여름", do_:"상승은 이어지지만 싸진 않습니다. 정기 적립은 유지하되 목돈 투입은 미루는 구간.", c:"var(--serious-ink)" };
+  return              { e:"🍁", n:"가을", do_:"고점·과열권입니다. 신규 매수는 신중하게, 안전자산·현금 비중을 점검할 구간.", c:"var(--crit-ink)" };
+}
+
+function sigLabel(v){   // 0~100 → 배지
+  if (v >= 68) return { t:"적극 매수",        c:"var(--good-ink)",    dot:"var(--good)" };
+  if (v >= 55) return { t:"분할 매수",        c:"var(--good-ink)",    dot:"var(--good)" };
+  if (v >= 42) return { t:"정기 적립 유지",   c:"var(--warn-ink)",    dot:"var(--warn)" };
+  if (v >= 28) return { t:"신규 매수 신중",   c:"var(--serious-ink)", dot:"var(--serious)" };
+  return             { t:"관망 · 비중 점검", c:"var(--crit-ink)",    dot:"var(--crit)" };
+}
+
+/* ============================================================
+   5. ETF 유니버스 (순자산·보수 = 2026-07 스냅샷)
+   ============================================================ */
+const ETFS = [
+ // cat, 이름, 코드, 순자산(억), TER%, 환, 신호모델, 메모
+ {cat:"미국지수", n:"TIGER 미국S&P500", c:"360750", aum:198043, ter:0.06, fx:"환노출", m:"usEq",
+  memo:"국내 ETF 전체 순자산 2위. S&P500 환노출 대표 종목."},
+ {cat:"미국지수", n:"KODEX 미국S&P500", c:"379800", aum:99099, ter:0.07, fx:"환노출", m:"usEq",
+  memo:"기초지수가 Total Return이라 배당 재투자형(이름의 TR은 2025.01 삭제)."},
+ {cat:"미국지수", n:"ACE 미국S&P500", c:"360200", aum:40037, ter:0.07, fx:"환노출", m:"usEq",
+  memo:"3위 규모. 비용은 상위권과 사실상 동률."},
+ {cat:"미국지수", n:"TIGER 미국나스닥100", c:"133690", aum:113876, ter:0.09, fx:"환노출", m:"usTech",
+  memo:"나스닥100 최대. 고점 대비 낙폭이 S&P500보다 커 상대적으로 눌린 상태."},
+ {cat:"미국지수", n:"KODEX 미국나스닥100", c:"379810", aum:89186, ter:0.12, fx:"환노출", m:"usTech",
+  memo:"TR형. TIGER 대비 TER 0.03%p 높음."},
+ {cat:"미국지수", n:"ACE 미국나스닥100", c:"367380", aum:35415, ter:0.10, fx:"환노출", m:"usTech", memo:""},
+ {cat:"미국지수", n:"KODEX 미국S&P500(H)", c:"449180", aum:9392, ter:0.11, fx:"환헤지", m:"usEqH",
+  memo:"환율이 역사적 상단일수록 상대 매력↑. 단 TER 밖 헤지비용 연 0.3~0.5% 별도."},
+ {cat:"미국지수", n:"KODEX 미국나스닥100(H)", c:"449190", aum:5809, ter:0.10, fx:"환헤지", m:"usEqH",
+  memo:"환헤지 나스닥 최대 규모. 헤지비용 감안 필요."},
+
+ {cat:"미국배당", n:"TIGER 미국배당다우존스", c:"458730", aum:40975, ter:0.01, fx:"환노출", m:"usDiv",
+  memo:"SCHD 국내판 최대. 성장주 과열기에 방어적. 보수 0.01%."},
+ {cat:"미국배당", n:"SOL 미국배당다우존스", c:"446720", aum:10296, ter:0.01, fx:"환노출", m:"usDiv",
+  memo:"동일 지수·동일 보수. 규모만 TIGER의 1/4."},
+ {cat:"미국배당", n:"TIGER 미국나스닥100타겟데일리커버드콜", c:"486290", aum:21919, ter:0.25, fx:"환노출", m:"cc",
+  memo:"횡보·완만한 조정에 유리하나 강한 반등장에서는 상승분을 반납. 장기 복리 적립에는 부적합할 수 있음."},
+
+ {cat:"국내", n:"KODEX 200", c:"069500", aum:238848, ter:0.16, fx:"—", m:"krEq",
+  memo:"순자산 1위지만 TER 0.16%로 RISE 200의 4배. 규모 1위 ≠ 비용 효율."},
+ {cat:"국내", n:"TIGER 200", c:"102110", aum:99454, ter:0.07, fx:"—", m:"krEq", memo:""},
+ {cat:"국내", n:"KODEX 200TR", c:"278530", aum:74363, ter:0.08, fx:"—", m:"krEq",
+  memo:"배당 재투자형. 연금계좌처럼 장기 보유라면 TR형이 유리."},
+ {cat:"국내", n:"RISE 200", c:"148020", aum:50741, ter:0.04, fx:"—", m:"krEq",
+  memo:"코스피200 중 최저 비용대. 20~30년 보유 자금이면 이 격차가 누적됩니다."},
+ {cat:"채권·안전", n:"ACE 미국30년국채액티브(H)", c:"453850", aum:15355, ter:0.11, fx:"환헤지", m:"ltBond",
+  memo:"IRP 안전자산 100% 인정. 금리 하락에 베팅하는 사실상 유일한 대형 종목."},
+ {cat:"채권·안전", n:"KODEX 종합채권(AA-이상)액티브", c:"273130", aum:36571, ter:0.06, fx:"—", m:"krBond",
+  memo:"IRP 안전자산 100%. 국내 금리 인상 전환은 단기 역풍."},
+ {cat:"채권·안전", n:"KODEX 머니마켓액티브", c:"488770", aum:77127, ter:0.06, fx:"—", m:"park",
+  memo:"듀레이션 ≈ 0. 금리 하락 시 자본이득 없음 — IRP 안전자산 30% 채우기·대기자금용."},
+ {cat:"채권·안전", n:"KODEX CD금리액티브(합성)", c:"459580", aum:67963, ter:0.03, fx:"—", m:"park",
+  memo:"위와 동일한 파킹 용도. 합성이지만 1배 추종이라 연금계좌 매수 가능."},
+
+ {cat:"금", n:"ACE KRX금현물", c:"411060", aum:40931, ter:0.31, fx:"환노출", m:"gold",
+  memo:"금현물이라 연금저축·IRP 모두 가능(금선물 ETF는 IRP 불가). 2025.07 보수 0.50%→0.19% 인하."},
+ {cat:"금", n:"TIGER KRX금현물", c:"0072R0", aum:12373, ter:0.25, fx:"환노출", m:"gold",
+  memo:"동일 지수, TER은 ACE보다 낮음."},
+
+ {cat:"글로벌", n:"KODEX MSCI선진국", c:"251350", aum:5204, ter:0.30, fx:"환노출", m:"world",
+  memo:"선진국 23개국(신흥국 제외, 미국 비중 60%+). '전세계 분산'과는 다름."},
+ {cat:"글로벌", n:"TIGER 토탈월드스탁액티브", c:"0060H0", aum:3965, ter:0.25, fx:"환노출", m:"world",
+  memo:"국내 상장 중 유일한 전세계 올캡(VT 성격). 2025.06 상장 신생 상품."}
+];
+
+/* 종목 성격별 점수 모델 */
+function etfScore(m, A){
+  const F = A.fear.s, V = A.val.s, X = A.fx.s, R = A.rate.s;
+  const to100 = s => clamp((clamp(s,-2,2)+2)/4*100, 0, 100);
+  const techTilt = clamp((A.fear.ndxDD - A.fear.spxDD)/6, -0.5, 0.8); // 나스닥이 더 눌렸으면 가산
+
+  switch(m){
+    case "usEq":   return to100(0.40*F + 0.25*V + 0.20*X + 0.15*R);
+    case "usEqH":  return to100(0.48*F + 0.30*V + 0.22*(-X*0.5) + 0.00*R); // 환율 축 제거, 고환율이면 소폭 가산
+    case "usTech": return to100(0.40*F + 0.28*V + 0.18*X + 0.14*R + techTilt*0.5);
+    case "usDiv":  return to100(0.32*F + 0.30*(-V*0.4) + 0.22*X + 0.16*(R*0.4) + 0.3); // 고밸류 국면의 방어 대안
+    case "cc":     return to100(0.30*F + 0.20*V + 0.20*X + 0.10*R - 0.3);
+    case "semi":   return to100(0.35*F + 0.30*V + 0.15*X + 0.10*R + techTilt - 0.4);   // 이미 급등 → 페널티
+    case "usFin":  return to100(0.30*F + 0.25*V + 0.20*X + 0.25*(-R*0.6));             // 고금리·인상 = 은행 우호
+    case "krEq":   return A.kr.score;                                    // 코스피 낙폭·추세에 직접 연동
+    case "krBank": return clamp(A.kr.score*0.45 + (58 + 18*(1-Math.exp(-A.kr.dd/12)))*0.55, 0, 100);
+    case "ltBond": return to100(0.75*A.rate.bondS + 0.25*(F*0.3));
+    // 국내 채권은 '미국' 금리가 아니라 한국 금리 방향이 드라이버 — 인상 전환은 역풍
+    case "krBond": return to100(0.60*(-A.rate.krHike*0.5) + 0.40*0.3);
+    case "park":   return null;                                                        // 신호 대상 아님
+    case "gold":   return to100(0.45*clamp((goldDD()-12)/10,-2,2) + 0.30*(F*0.5) + 0.25*(-X*0.4));
+    case "world":  return to100(0.38*F + 0.26*V + 0.22*X + 0.14*R + 0.15);
+  }
+  return 50;
+}
+const goldDD = () => (D.goldHigh - D.gold.v) / D.goldHigh * 100;
+
+/* ============================================================
+   5-B. 산업군 지도
+   type: growth(구조적 성장) / defensive(경기방어) / cyclical(경기민감)
+         rateUp(금리 상승 수혜) / rateDown(금리 하락 수혜) / geo(지정학)
+   proxy: 낙폭·200일선을 실시간 계산할 미국 동종 섹터 ETF (stooq 심볼)
+   snapDD/snap200: 프록시가 없거나 호출 실패 시 쓰는 스냅샷 (2026-07 기준)
+   ============================================================ */
+const SECTORS = [
+{ id:"semi", name:"반도체", type:"growth", proxy:"soxx.us", snapDD:19.4, snap200:3.0, group:"성장",
+  rule:"AI 수요가 만드는 구조적 성장 섹터. 사이클은 크지만 방향은 위 — <b>급락할 때 나눠 담는</b> 것이 정석입니다.",
+  caution:"<b>7/28 코스피 -10.84%(서킷브레이커), 7/29 이틀째 급락</b>의 진앙이 여기입니다. 중국의 DUV 노광장비 국산화와 CXMT 상장(공모가 대비 +470%)으로 메모리 과점 구도에 의문이 붙었습니다. SK하이닉스는 <b>사상 최대 실적을 내고도</b> 컨센서스 미달로 급락했습니다. 삼성전자·SK하이닉스 모두 6월 고점 대비 -40%대입니다. 구조적 성장 논리는 유효하지만 <b>지금은 명백히 떨어지는 칼날</b>입니다. 최소 3~4회로 쪼개고, 한 번에 넣지 마세요.",
+  etfs:[
+   {n:"TIGER 반도체TOP10", c:"396500", aum:98000, ter:0.51, mkt:"한국"},
+   {n:"TIGER 미국필라델피아반도체나스닥", c:"381180", aum:63178, ter:0.60, mkt:"미국"},
+   {n:"KODEX 반도체", c:"091160", aum:57978, ter:0.46, mkt:"한국"},
+   {n:"KODEX 미국반도체", c:"390390", aum:13786, ter:0.17, mkt:"미국", best:"비용 최저"}]},
+
+{ id:"ai", name:"AI · 로봇", type:"growth", snapDD:14, snap200:6, group:"성장",
+  rule:"반도체와 같은 논리(구조적 성장)지만 한 단계 더 뜨겁고 더 비쌉니다. 조정 시 분할 매수 대상.",
+  caution:"1년 +147%(글로벌 AI) 뒤의 조정입니다. 일부 로봇주 PER 수천 배 경고가 나온 구간이라 <b>코어가 아니라 위성(satellite)으로</b>, 전체의 5~10% 안에서 다루세요.",
+  etfs:[
+   {n:"TIME 글로벌AI인공지능액티브", c:"456600", aum:27514, ter:0.85, mkt:"글로벌"},
+   {n:"KODEX 로봇액티브", c:"445290", aum:10871, ter:0.57, mkt:"한국"},
+   {n:"TIGER 코리아휴머노이드로봇산업", c:"0148J0", aum:4916, ter:0.53, mkt:"한국"},
+   {n:"KODEX 미국휴머노이드로봇", c:"0038A0", aum:2956, ter:0.54, mkt:"미국"}]},
+
+{ id:"power", name:"전력인프라 · 원자력", type:"growth", snapDD:30, snap200:-8, group:"성장",
+  rule:"AI 데이터센터가 쓰는 전기를 만드는 쪽. 반도체보다 한 박자 늦게 움직이는 파생 수혜 섹터입니다.",
+  caution:"4월 YTD +100~141%로 국내 ETF 수익률 1위였다가 <b>3개월 -49%</b>까지 무너진 섹터입니다. 자금 이탈이 아직 진행 중이라 바닥 확인 후 들어가도 늦지 않습니다. TIGER 코리아원자력은 이름과 달리 <b>실질 건설주</b>(현대건설 25%·대우건설 14%)라는 점도 확인하세요.",
+  etfs:[
+   {n:"KODEX AI전력핵심설비", c:"487240", aum:28899, ter:0.46, mkt:"한국"},
+   {n:"KODEX 미국AI전력핵심인프라", c:"487230", aum:19420, ter:0.53, mkt:"미국"},
+   {n:"RISE AI전력인프라", c:"0101N0", aum:5885, ter:0.23, mkt:"한국", best:"비용 최저"},
+   {n:"HANARO 원자력iSelect", c:"434730", aum:6626, ter:0.52, mkt:"한국"}]},
+
+{ id:"defense", name:"방산 · 우주항공", type:"geo", snapDD:12, snap200:1, group:"지정학",
+  rule:"지정학 리스크가 커질 때 오릅니다. 뉴스가 터진 <b>뒤에</b> 사면 이미 늦는 섹터라, 조용할 때 조금씩 모으는 편이 낫습니다.",
+  caution:"⚠ <b>록히드마틴·RTX 같은 정통 미국 방산주에 투자하는 대형 ETF는 국내에 없습니다.</b> 이름이 '우주항공'인 상품들은 대부분 로켓랩 등 <b>우주 테마주</b>라 성격이 전혀 다릅니다. 실질적인 선택지는 한국 방산(한화에어로 등)입니다.",
+  etfs:[
+   {n:"PLUS K방산", c:"449450", aum:11221, ter:0.51, mkt:"한국"},
+   {n:"TIGER K방산&우주", c:"463250", aum:5542, ter:0.51, mkt:"한국"},
+   {n:"KODEX 미국우주항공", c:"0167Z0", aum:3531, ter:0.56, mkt:"미국", note:"우주 테마(정통 방산 아님)"}]},
+
+{ id:"ship", name:"조선", type:"cyclical", snapDD:14, snap200:-2, group:"경기민감",
+  rule:"수주 사이클 산업. 경기 회복 초입 + 발주 사이클 상승기에 담고, 사이클 고점에서 파는 섹터입니다.",
+  caution:"MASGA·LNG선 랠리 이후 2026년은 <b>1년 +2.8%로 사실상 제자리</b>입니다. 뉴스는 많은데 주가가 안 따라오는 구간이라, 신규 수주 데이터를 직접 확인하기 전엔 서두를 이유가 없습니다.",
+  etfs:[
+   {n:"SOL 조선TOP3플러스", c:"466920", aum:15670, ter:0.51, mkt:"한국"},
+   {n:"TIGER 조선TOP10", c:"494670", aum:5798, ter:0.41, mkt:"한국", best:"비용 최저"},
+   {n:"KODEX 조선TOP10", c:"0115D0", aum:2071, ter:0.49, mkt:"한국"}],
+  none:"순수 <b>해운</b> ETF는 국내에 없습니다 (유일한 접점 HANARO Fn조선해운 774억도 조선 혼합형)."},
+
+{ id:"batt", name:"2차전지 · 배터리", type:"cyclical", snapDD:45, snap200:-12, group:"경기민감",
+  rule:"장기 성장 스토리는 살아 있지만 지금은 <b>사이클 저점 구간</b>입니다. 저평가 매수 성향에는 맞는 자리지만, 바닥이 길 수 있습니다.",
+  caution:"6개월 -15~-40%, 1년은 겨우 +6%입니다. 4월 ESS·전고체 기대로 반등했다가 실패한 전력이 있어, <b>기다릴 각오가 있을 때만</b> 접근하세요. 글로벌 리튬(394670)은 1년 +65%로 국내물보다 훨씬 나았습니다.",
+  etfs:[
+   {n:"KODEX 2차전지산업", c:"305720", aum:14850, ter:0.55, mkt:"한국"},
+   {n:"TIGER 2차전지테마", c:"305540", aum:8121, ter:0.55, mkt:"한국"},
+   {n:"TIGER 2차전지TOP10", c:"364980", aum:5925, ter:0.43, mkt:"한국", best:"비용 최저"},
+   {n:"TIGER 글로벌리튬&2차전지(합성)", c:"394670", aum:2096, ter:0.55, mkt:"글로벌", note:"합성 — 증권사 확인"}]},
+
+{ id:"fin", name:"금융 · 은행", type:"rateUp", proxy:"xlf.us", snapDD:5, snap200:4, group:"금리",
+  rule:"<b>금리가 오를 때</b> 예대마진이 벌어져 유리한 섹터. 한국은행이 2026-07-16에 인상으로 전환해 지금이 그 국면입니다.",
+  caution:"7월 코스피가 -19.5% 빠지는 동안 <b>KRX 은행지수는 +13.0%</b>로 2026년 최강 방어 섹터였습니다. 다만 이미 1년 +39~43%라 싼 자리는 아닙니다. ⚠ <b>미국 은행 ETF는 국내에 사실상 없습니다</b> — 유일한 KODEX 미국S&P500금융이 452억으로 규모 미달입니다.",
+  etfs:[
+   {n:"KODEX 증권", c:"102970", aum:8137, ter:0.46, mkt:"한국"},
+   {n:"KODEX 금융고배당TOP10타겟위클리커버드콜", c:"498410", aum:7929, ter:0.42, mkt:"한국", note:"커버드콜 — 상승분 일부 반납"},
+   {n:"KODEX 은행", c:"091170", aum:3413, ter:0.31, mkt:"한국", best:"순수 은행 · 비용 최저"},
+   {n:"TIGER 은행고배당플러스TOP10", c:"466940", aum:7899, ter:null, mkt:"한국"}]},
+
+{ id:"reit", name:"리츠 · 부동산", type:"rateDown", proxy:"xlre.us", snapDD:9, snap200:2, group:"금리",
+  rule:"금융과 정반대로 <b>금리가 내릴 때</b> 유리합니다. 배당 매력이 채권 대비 상대적으로 커지기 때문입니다.",
+  caution:"한국은행 인상 전환 + 제이알글로벌리츠 회생절차로 <b>상장리츠 23개 중 19개가 하락, 평균 -17.9%</b>입니다. 배당수익률 6.3%는 8년래 최저. 금리 인하로 돌아서기 전까지는 역풍입니다. ⚠ 미국 리츠는 국내상장 최대가 1,331억(합성 H)이라 선택지가 얇습니다.",
+  etfs:[
+   {n:"TIGER 리츠부동산인프라", c:"329200", aum:14659, ter:0.15, mkt:"한국", best:"비용 최저"},
+   {n:"KODEX 한국부동산리츠인프라", c:"476800", aum:4821, ter:0.18, mkt:"한국"},
+   {n:"TIGER 미국MSCI리츠(합성 H)", c:"182480", aum:1331, ter:0.44, mkt:"미국", note:"합성·환헤지"}]},
+
+{ id:"bio", name:"바이오 · 헬스케어", type:"defensive", proxy:"xlv.us", snapDD:6, snap200:1, group:"방어",
+  rule:"경기와 상관없이 쓰는 돈이라 방어 성격이 있고, 신약 모멘텀이 붙으면 성장주처럼 움직이는 이중 성격입니다.",
+  caution:"<b>한국과 미국이 정반대입니다.</b> 한국 바이오는 코스닥 급락(4월말 1,229p → 7/24 760p)과 임상 실패로 1년 -12~-20%, 반면 미국 바이오는 1년 +51.5%. ⚠ 국내상장 미국 헬스케어 ETF는 전부 1,000억 미만이라 실행이 어렵습니다.",
+  etfs:[
+   {n:"KoAct 바이오헬스케어액티브", c:"462900", aum:3527, ter:0.57, mkt:"한국"},
+   {n:"TIGER 바이오TOP10", c:"364970", aum:2677, ter:0.43, mkt:"한국", best:"비용 최저"},
+   {n:"TIGER 미국나스닥바이오", c:"203780", aum:979, ter:0.78, mkt:"미국", note:"규모 작음"}]},
+
+{ id:"staple", name:"필수소비재 · 식음료", type:"defensive", proxy:"xlp.us", snapDD:4, snap200:0, group:"방어",
+  rule:"불황에도 먹고 씻는 데 쓰는 돈은 줄지 않습니다. <b>경기 침체 진입 신호가 뜰 때</b> 담는 섹터가 맞습니다.",
+  caution:"다만 지금은 침체 신호가 없습니다 — 10년-2년 금리차가 정상(우상향)이라 곡선 역전이 없습니다. 서두를 국면이 아닙니다.",
+  none:"⚠ <b>더 큰 문제: 연금계좌에서 살 만한 상품이 사실상 없습니다.</b><br>· 한국 — 최대가 TIGER 경기방어 <b>414억</b>, KODEX 필수소비재 127억. 순수 <b>식음료 단독 ETF는 아예 없습니다.</b><br>· 미국(XLP 성격) — 국내상장 단 1종 KODEX 미국S&P500필수소비재(453630)가 <b>175억</b>. TIGER·ACE·RISE의 미국 필수소비재 상품은 <b>존재하지 않습니다.</b><br>→ 현실적 대안은 아래 배당귀족입니다.",
+  etfs:[
+   {n:"TIGER 미국S&P500배당귀족", c:"429000", aum:1830, ter:0.32, mkt:"미국", best:"실질 대안 — P&G·코카콜라 등 필수소비재 비중 높음"},
+   {n:"KODEX 미국S&P500필수소비재", c:"453630", aum:175, ter:0.36, mkt:"미국", note:"규모 미달(175억)"},
+   {n:"TIGER 경기방어", c:"139280", aum:414, ter:0.42, mkt:"한국", note:"규모 미달(414억)"}]},
+
+{ id:"energy", name:"에너지 · 원유", type:"cyclical", proxy:"xle.us", snapDD:5, snap200:6, group:"경기민감",
+  rule:"경기 확장기와 지정학 리스크에 함께 오릅니다. 인플레이션 헤지 성격도 있습니다.",
+  caution:"1년 +52~89%로 강세였고 7월 중동 긴장으로 브렌트유가 $100을 넘었지만, 최근 1~3개월은 전 종목 조정입니다.",
+  none:"⚠ <b>연금계좌용으로 쓸 만한 상품이 없습니다.</b> 500억을 넘는 유일한 상품 KODEX WTI원유선물(H)은 <b>선물형이라 IRP 매수 불가</b>이고, 주식형 대안(KODEX 미국S&P500에너지 483억, KIWOOM 미국원유에너지기업 343억)은 전부 500억 미만입니다.",
+  etfs:[
+   {n:"KODEX 미국S&P500에너지(합성)", c:"218420", aum:483, ter:0.33, mkt:"미국", note:"규모 미달 · 합성"},
+   {n:"KIWOOM 미국원유에너지기업", c:"474800", aum:343, ter:1.09, mkt:"미국", note:"규모 미달 · TER 1.09%"}]},
+
+{ id:"auto", name:"자동차 · 모빌리티", type:"cyclical", snapDD:7, snap200:3, group:"경기민감",
+  rule:"대표적 경기민감 소비재. 금리가 내리고 경기가 살아날 때 유리합니다.",
+  caution:"1년 +42%로 강했고 최근 1개월은 -4~-7% 조정입니다. 미국 관세가 최대 변수. ⚠ 순수 미국 전기차 ETF는 국내에 없어 중국 EV·테슬라 밸류체인이 대체재입니다. ACE 테슬라밸류체인액티브는 <b>2배 레버리지 ETF를 13% 편입</b>하고 있어 증권사 확인이 필요합니다.",
+  etfs:[
+   {n:"TIGER 차이나전기차SOLACTIVE", c:"371460", aum:7999, ter:0.55, mkt:"중국"},
+   {n:"ACE 테슬라밸류체인액티브", c:"457480", aum:7528, ter:0.37, mkt:"미국", note:"2X ETF 12.95% 편입"},
+   {n:"TIGER 현대차그룹플러스", c:"138540", aum:6640, ter:0.20, mkt:"한국", best:"비용 최저"},
+   {n:"KODEX 자동차", c:"091180", aum:4455, ter:0.46, mkt:"한국"}]},
+
+{ id:"soft", name:"인터넷 · 소프트웨어", type:"growth", snapDD:20, snap200:-4, group:"성장",
+  rule:"성장 섹터지만 지금은 AI 하드웨어에 자금을 다 뺏긴 상태입니다. 소외된 만큼 저평가 매수 관점에서는 볼 만합니다.",
+  caution:"<b>기술주 = 강세</b>라는 통념이 깨진 대표 사례입니다. 2026년 반도체 +66%인 동안 소프트웨어는 -18.8%, 클라우드 -16.4%. 한국은 더 심해서 TIGER 소프트웨어 1년 -8.4%, 게임 -20~-25%. NAVER·카카오는 전고점의 40%·24% 수준입니다.",
+  etfs:[
+   {n:"TIGER 미국테크TOP10 INDXX", c:"381170", aum:39391, ter:0.55, mkt:"미국", note:"메가캡 10종목 집중"},
+   {n:"ACE 미국빅테크TOP7 Plus", c:"465580", aum:10168, ter:0.37, mkt:"미국", best:"비용 최저"},
+   {n:"SOL 미국AI소프트웨어", c:"481180", aum:1405, ter:0.55, mkt:"미국", note:"순수 SW 섹터"},
+   {n:"TIGER 소프트웨어", c:"157490", aum:760, ter:0.45, mkt:"한국", note:"한국 유일 · NAVER 27%"}]},
+
+{ id:"util", name:"유틸리티", type:"defensive", proxy:"xlu.us", snapDD:3, snap200:2, group:"방어",
+  rule:"전기·가스처럼 경기와 무관한 현금흐름. 침체기·고변동 구간의 대표 방어 자산입니다.",
+  caution:"미국 유틸리티는 1개월 -2.4%, 1년 +15%로 실제로 저변동·완만한 상승을 보여줬습니다. 성격상 연금 장기 보유에 잘 맞는데, 문제는 살 상품이 없다는 점입니다.",
+  none:"⚠ <b>미국 유틸리티 ETF는 국내상장 단 1종(KODEX 미국S&P500유틸리티) 134억, 한국 유틸리티 ETF는 상품 자체가 없습니다.</b> 한국전력을 담는 KRX 유틸리티 ETF는 존재하지 않고, 국내 '전력' 테마는 전부 전력기기·원자력 밸류체인(위 전력인프라 항목)입니다.",
+  etfs:[
+   {n:"KODEX 미국S&P500유틸리티", c:"463640", aum:134, ter:0.35, mkt:"미국", note:"규모 미달(134억)"}]},
+
+{ id:"mat", name:"소재 · 화학 · 철강", type:"cyclical", snapDD:25, snap200:-9, group:"경기민감",
+  rule:"경기 사이클의 가장 앞쪽. 경기 바닥에서 먼저 도는 섹터라 회복 초입 신호에 담습니다.",
+  caution:"현재는 자금이 아예 유입되지 않아 라인업 자체가 쪼그라든 상태입니다.",
+  none:"⚠ <b>500억 이상 상품이 하나도 없습니다.</b> KODEX 에너지화학 265억, TIGER 200 에너지화학 239억(괴리율 -3.86%), KODEX 철강 225억. 순수 '화학' 또는 '소재' 단독 ETF도 국내에 없습니다. 유동성·괴리율 문제로 권하기 어렵습니다.",
+  etfs:[
+   {n:"KODEX 에너지화학", c:"117460", aum:265, ter:0.46, mkt:"한국", note:"규모 미달"},
+   {n:"KODEX 철강", c:"117680", aum:225, ter:0.45, mkt:"한국", note:"규모 미달"}]}
+];
+
+/* 산업군 프록시(미국 동종 섹터 ETF) 실시간 낙폭·200일선 */
+async function loadSectors(){
+  const withProxy = SECTORS.filter(s => s.proxy);
+  await Promise.all(withProxy.map(async s => {
+    try{
+      const h = await stooqDaily(s.proxy, 430);
+      if (!h) { s.live = false; return; }
+      const last = h[h.length-1].c;
+      const hi   = Math.max.apply(null, h.slice(-260).map(x=>x.c));
+      const ma   = avg(h.slice(-200).map(x=>x.c));
+      s.dd   = (hi - last) / hi * 100;
+      s.p200 = (last / ma - 1) * 100;
+      s.live = true;
+    }catch(e){ s.live = false; }
+  }));
+  SECTORS.forEach(s => {
+    if (!s.live){ s.dd = s.snapDD; s.p200 = s.snap200; s.live = false; }
+  });
+  mark("sector", SECTORS.some(s=>s.live));
+}
+
+/* 산업군 신호 — 성격에 따라 계산 방식이 다르다 */
+function sectorScore(s, A){
+  const dd = s.dd, p200 = s.p200;
+  const recession = clamp((0.30 - A.rate.spread) / 0.30, 0, 1);   // 곡선 평탄/역전 → 침체 위험↑
+  // 낙폭 효과는 체감(saturating)시킨다 — 40% 빠졌다고 20% 빠진 것의 2배로 좋은 자리는 아니다
+  const sat = (x, k) => 1 - Math.exp(-Math.max(0,x)/k);
+  // 200일선 아래면 아직 하락 추세 — '떨어지는 칼날' 감점
+  const knife = clamp(-p200, 0, 25) * 0.8;
+  let v;
+  switch(s.type){
+    case "growth":    v = 40 + 42*sat(dd,18) - knife; break;                    // 떨어질수록 매수, 단 추세 확인
+    case "defensive": v = 34 + recession*32 + dd*0.9; break;                    // 침체 신호에 반응
+    case "cyclical":  v = 30 + 34*sat(dd,22) + (1-recession)*14
+                          + clamp(p200,-10,8)*0.7; break;                       // 회복 초입에 반응
+    case "rateUp":    v = 0.45*A.kr.score + 0.55*(58 + 18*sat(dd,12)); break;                            // 한국 인상 전환 국면
+    case "rateDown":  v = 24 + 22*sat(dd,12); break;                            // 인상 전환은 역풍
+    case "geo":       v = 42 + 20*sat(dd,15); break;
+    default:          v = 50;
+  }
+  return clamp(v, 0, 100);
+}
+const TYPE_LABEL = { growth:"구조적 성장", defensive:"경기방어", cyclical:"경기민감",
+                     rateUp:"금리 상승 수혜", rateDown:"금리 하락 수혜", geo:"지정학" };
+
+/* ============================================================
+   6. 렌더링
+   ============================================================ */
+const $ = id => document.getElementById(id);
+// 외부 API에서 온 문자열은 반드시 이걸 거쳐서 DOM에 넣는다
+const esc = v => String(v == null ? "" : v).replace(/[&<>"']/g,
+  c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmt = (v,n) => (v==null || !isFinite(v)) ? "–" : v.toLocaleString("ko-KR",{minimumFractionDigits:n||0, maximumFractionDigits:n||0});
+const aumTxt = a => a >= 10000 ? (a/10000).toFixed(1).replace(/\.0$/,"") + "조" : fmt(a) + "억";
+
+function renderStatus(){
+  const items = [
+    ["환율", "fx"], ["환율밴드","fxband"], ["VIX","vix"], ["공포탐욕","fng"],
+    ["S&P500","spx"], ["나스닥100","ndx"], ["미국 10년물","us10y"], ["금","gold"],
+    ["코스피","kospi"], ["산업군 낙폭","sector"]
+  ];
+  $("statusbar").innerHTML =
+    '<span style="font-size:12px;color:var(--ink-3);align-self:center;margin-right:2px">범례</span>' +
+    '<span class="chip"><span class="dot live"></span>실시간 자동 갱신</span>' +
+    '<span class="chip"><span class="dot snap"></span>스냅샷 대체(호출 차단)</span>' +
+    '<span style="flex-basis:100%;height:0"></span>' +
+    items.map(([lbl,k]) =>
+      '<span class="chip"><span class="dot '+(SRC[k]==="live"?"live":"snap")+'"></span>'+lbl+'</span>'
+    ).join("") +
+    '<span class="chip"><span class="dot snap"></span>금리·밸류·ETF 순자산 (수동 · '+SNAP.asOf+')</span>'+
+    (PIPE ? '<span class="chip"><span class="dot live"></span>파이프라인 JSON 사용'+
+            (typeof PIPE==="string" ? ' ('+esc(PIPE)+')' : '')+'</span>' : '');
+}
+
+function renderHero(A){
+  const s = season(A.score);
+  $("s-emoji").textContent = s.e;
+  $("s-name").textContent  = s.n;
+  $("s-name").style.color  = s.c;
+  $("s-do").textContent    = s.do_;
+  $("s-score").textContent = A.score.toFixed(0);
+  $("meter-mark").style.left = A.score.toFixed(1) + "%";
+
+  const pos = x => x > 0.4 ? "우호" : x < -0.4 ? "비우호" : "중립";
+  $("s-summary").innerHTML =
+    "공포·과열 <b>"+pos(A.fear.s)+"</b> · 밸류에이션 <b>"+pos(A.val.s)+"</b> · " +
+    "환율 <b>"+pos(A.fx.s)+"</b> · 금리 <b>"+pos(A.rate.s)+"</b>";
+}
+
+function axisCard(o){
+  return '<div class="axis">'+
+    '<p class="label"><span>'+o.label+'</span><span>'+o.w+'</span></p>'+
+    '<div class="val">'+o.val+' <small>'+(o.unit||"")+'</small></div>'+
+    '<div class="verdict" style="color:'+o.c+'">'+o.icon+' '+o.verdict+'</div>'+
+    '<p class="why">'+o.why+'</p>'+
+    '<div class="rows">'+o.rows.map(r=>'<div><span>'+r[0]+'</span><b>'+r[1]+'</b></div>').join("")+'</div>'+
+  '</div>';
+}
+function vcol(s){ return s>0.7?"var(--good-ink)" : s>0.2?"var(--warn-ink)" : s>-0.7?"var(--serious-ink)" : "var(--crit-ink)"; }
+function vtxt(s){ return s>0.7?"매수 우호":s>0.2?"약간 우호":s>-0.7?"중립~부담":"매수 비우호"; }
+
+function renderAxes(A){
+  const html = [];
+
+  html.push(axisCard({
+    label:"① 공포 · 과열", w:"가중 40%",
+    val: D.fng.v.toFixed(0), unit:"공포탐욕지수",
+    c: vcol(A.fear.s), icon: A.fear.s>0.2?"▲":A.fear.s>-0.7?"■":"▼", verdict: vtxt(A.fear.s),
+    why: D.fng.v<45 ? "심리는 공포 쪽인데 지수는 고점 근처 — 조정보다는 '눈치보기'에 가깝습니다."
+                    : "심리가 낙관 쪽입니다. 남들이 편안할 때가 대개 비쌀 때입니다.",
+    rows:[
+      ["VIX", D.vix.v.toFixed(1)+" (평균 19)"],
+      ["S&P500 고점대비", "-"+A.fear.spxDD.toFixed(1)+"%"],
+      ["나스닥100 고점대비", "-"+A.fear.ndxDD.toFixed(1)+"%"],
+      ["S&P500 200일선", (A.fear.spx200>=0?"+":"")+A.fear.spx200.toFixed(1)+"%"]
+    ]
+  }));
+
+  html.push(axisCard({
+    label:"② 환율 (원/달러)", w:"가중 20%",
+    val: fmt(D.usdkrw.v,1), unit:"원",
+    c: vcol(A.fx.s), icon: A.fx.s>0.2?"▲":A.fx.s>-0.7?"■":"▼", verdict: vtxt(A.fx.s),
+    why: A.fx.pct > 60
+      ? "최근 한 달 원화가 크게 강해졌지만, 3년 분포로 보면 여전히 <b>상단권</b>입니다. 환노출 미국 ETF에 목돈을 넣기엔 아직 불리합니다."
+      : (A.fx.pct > 40 ? "3년 분포의 중간 구간입니다. 환율이 판단을 좌우할 국면은 아닙니다."
+                       : "3년 분포의 <b>하단권</b> — 원화가 강합니다. 환노출 미국 ETF를 싸게 담을 수 있는 구간."),
+    rows:[
+      ["3년 백분위", A.fx.pct.toFixed(0)+"%"],
+      ["3년 25 백분위", fmt(A.fx.p25,0)+"원"],
+      ["3년 75 백분위", fmt(A.fx.p75,0)+"원"],
+      ["기준일", esc(D.usdkrw.d)]
+    ]
+  }));
+
+  html.push(axisCard({
+    label:"③ 금리 · 매크로", w:"가중 15%",
+    val: D.us10y.v.toFixed(2), unit:"% 미국 10년물",
+    c: vcol(A.rate.s), icon: A.rate.s>0.2?"▲":A.rate.s>-0.7?"■":"▼", verdict: vtxt(A.rate.s),
+    why: "인하 사이클은 끝났고 동결이 이어지는 국면입니다. 높은 장기금리는 주식 밸류에이션엔 부담, <b>장기채·은행주엔 기회</b>입니다.",
+    rows:[
+      ["연준 기준금리", SNAP.fedLow.toFixed(2)+"~"+SNAP.fedHigh.toFixed(2)+"%"],
+      ["10년-2년 스프레드", (A.rate.spread>=0?"+":"")+(A.rate.spread*100).toFixed(0)+"bp"],
+      ["한국 기준금리", D.krBase.v.toFixed(2)+"% (인상 전환)"],
+      ["방향성", "동결 · 인상 리스크"]
+    ]
+  }));
+
+  html.push(axisCard({
+    label:"④ 밸류에이션", w:"가중 25%",
+    val: SNAP.fwdPE.toFixed(1), unit:"배 S&P500 선행 P/E",
+    c: vcol(A.val.s), icon: A.val.s>0.2?"▲":A.val.s>-0.7?"■":"▼", verdict: vtxt(A.val.s),
+    why: "10년 평균 대비 <b>"+(A.val.prem>=0?"+":"")+A.val.prem.toFixed(1)+"%</b> 수준. 버블이라 부를 정도는 아니지만 싸지도 않습니다.",
+    rows:[
+      ["10년 평균", SNAP.fwdPE10yAvg.toFixed(1)+"배"],
+      ["나스닥100 P/E", SNAP.ndxPE.toFixed(1)+"배"],
+      ["금 고점대비", "-"+goldDD().toFixed(1)+"%"],
+      ["기준일", SNAP.asOf]
+    ]
+  }));
+
+  $("axes").innerHTML = html.join("");
+}
+
+/* --- 한국 시장 카드 --- */
+function renderKorea(A){
+  const K = A.kr, s = sigLabel(K.score);
+  $("kr-src").textContent = SRC.kospi === "live"
+    ? "· 실시간 (" + esc(D.kospi.d) + ")" : "· 스냅샷 (" + esc(D.kospi.d) + ")";
+
+  const crash = K.dd >= 20;
+  let msg, cls;
+  if (K.note === "trendUnknown"){
+    cls = "warn";
+    msg = "<b>200일선 데이터를 받지 못해 추세를 판정하지 못했습니다.</b> 낙폭만 보면 매수 구간이지만, "+
+          "떨어지는 중인지 바닥인지 구분할 수 없어 <b>점수를 60점으로 제한</b>했습니다. "+
+          "「↻ 새로고침」으로 실시간 데이터가 들어오면 정상 판정됩니다.";
+  } else if (K.note === "deep"){
+    cls = "ok";
+    msg = "<b>200일선을 "+Math.abs(K.p200).toFixed(0)+"% 밑돌고 있습니다.</b> 고점 대비뿐 아니라 "+
+          "<b>장기 평균 대비로도 확실히 싸진</b> 구간입니다. 다만 아직 떨어지는 중이므로 몇 달에 걸쳐 나눠 담으세요.";
+  } else if (K.note === "below"){
+    cls = "warn";
+    msg = "200일선을 "+Math.abs(K.p200).toFixed(0)+"% 밑돌고 있습니다. 싸지기 시작한 초입입니다.";
+  } else if (K.note === "near"){
+    cls = "warn";
+    // 낙폭과 200일선 이격도가 크게 벌어져 있으면 '폭등 뒤 되돌림'이라는 뜻
+    msg = (K.dd - Math.abs(K.p200) > 20)
+      ? "<b>고점 대비로는 -"+K.dd.toFixed(0)+"%지만, 200일선 대비로는 "+K.p200.toFixed(1)+
+        "%에 불과합니다.</b> 직전 상승이 워낙 가팔라서, 이만큼 떨어지고도 <b>장기 평균 수준으로 겨우 돌아온 것</b>입니다. "+
+        "「반토막 났으니 싸다」가 아니라 「이제 겨우 제자리」로 읽는 편이 정확합니다."
+      : "200일선 부근("+K.p200.toFixed(1)+"%)입니다. 고점 대비 -"+K.dd.toFixed(0)+
+        "% 조정으로 장기 평균 수준까지 내려왔습니다. 극단적으로 싸지도, 비싸지도 않은 구간입니다.";
+  } else {
+    cls = "bad";
+    msg = "<b>고점 대비 낙폭에도 불구하고 여전히 200일선 위("+K.p200.toFixed(1)+"%)입니다.</b> "+
+          "장기 평균보다 비싼 상태라, 낙폭만 보고 들어갈 자리는 아닙니다.";
+  }
+
+  $("kr-body").innerHTML =
+    '<div class="kpi">'+
+      '<div><span>코스피</span><b>'+fmt(D.kospi.v,0)+'</b><em>'+esc(D.kospi.d)+'</em></div>'+
+      '<div><span>고점 대비</span><b style="color:'+(crash?"var(--crit-ink)":"var(--ink-1)")+'">-'+K.dd.toFixed(1)+'%</b>'+
+        '<em>최고 '+fmt(D.kospiHigh,0)+'</em></div>'+
+      '<div><span>200일선</span><b>'+(K.p200==null?"–":(K.p200>=0?"+":"")+K.p200.toFixed(1)+"%")+'</b>'+
+        '<em>'+(K.p200==null?"데이터 없음":(D.kospiMa200Est?"추정 "+fmt(D.kospiMa200,0)+" 기준":"실측 "+fmt(D.kospiMa200,0)))+'</em></div>'+
+      '<div><span>국내 ETF 신호</span><b style="color:'+s.c+'">'+K.score.toFixed(0)+'</b><em>'+s.t+'</em></div>'+
+    '</div>'+
+    '<div class="alert '+cls+'">'+msg+'</div>'+
+    (crash ? '<div class="alert warn" style="margin-top:8px">⚠ <b>코스피 = 사실상 반도체 지수입니다.</b> '+
+      'KODEX 200은 삼성전자 33.1% + SK하이닉스 32.0%로 <b>두 종목이 65%</b>입니다. '+
+      '"국내 대표지수에 분산 투자"라고 생각해도 실제로는 반도체 두 종목 베팅에 가깝습니다. '+
+      '아래 「중복 노출 진단」에서 본인 포트폴리오 기준으로 확인해 보세요.</div>' : '')+
+    '<p class="note" style="max-width:none;margin-top:10px">※ 이 점수가 KODEX 200·TIGER 200 등 국내 주식형 ETF의 신호와 '+
+      '「금융·은행」 산업군 판정에 그대로 반영됩니다.</p>';
+}
+
+/* --- 환율 라인차트 --- */
+function renderFxChart(A){
+  const box = $("fxchart"), tip = $("fxtip");
+  if (!D.fxSeries){
+    $("fx-src").textContent = "· 자동 호출 실패 — 밴드는 연도별 실측 고/저 기준 추정";
+    box.innerHTML = '<p class="sub" style="padding:26px 0">환율 시계열을 불러오지 못했습니다. '+
+      '현재 <b>'+fmt(D.usdkrw.v,1)+'원</b>은 최근 3년 실측 범위(1,295~1,562원)의 <b>'+A.fx.pct.toFixed(0)+' 백분위</b>입니다.</p>';
+    return;
+  }
+  $("fx-src").textContent = "· 실시간 (Frankfurter/ECB, "+D.fxSeries.length+"영업일)";  // textContent라 안전
+
+  const S = D.fxSeries, W = 1000, H = 260, ML=8, MR=52, MT=14, MB=26;
+  const cs = S.map(x=>x.c);
+  const lo = Math.min.apply(null, cs), hi = Math.max.apply(null, cs);
+  const pad = (hi-lo)*0.08;
+  const y0 = lo-pad, y1 = hi+pad;
+  const X = i => ML + i/(S.length-1) * (W-ML-MR);
+  const Y = v => MT + (1 - (v-y0)/(y1-y0)) * (H-MT-MB);
+
+  const ticks = [];
+  const step = Math.max(20, Math.round((y1-y0)/5/20)*20);
+  for (let t = Math.ceil(y0/step)*step; t <= y1; t += step) ticks.push(t);
+
+  let path = "M";
+  S.forEach((p,i)=>{ path += (i?" L":"") + X(i).toFixed(1)+","+Y(p.c).toFixed(1); });
+
+  const yrs = {};
+  S.forEach((p,i)=>{ const y = esc(p.d).slice(0,4); if(!(y in yrs)) yrs[y]=i; });
+
+  const cur = D.usdkrw.v;
+  const svg =
+  '<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="원달러 환율 3년 추이">'+
+    '<rect class="band" x="'+ML+'" y="'+Y(A.fx.p75).toFixed(1)+'" width="'+(W-ML-MR)+'" height="'+Math.max(1,(Y(A.fx.p25)-Y(A.fx.p75))).toFixed(1)+'" rx="3"></rect>'+
+    // 현재값 라벨과 겹치는 눈금 라벨은 숨긴다(그리드선은 유지)
+    ticks.map(t=>'<line class="gridline" x1="'+ML+'" y1="'+Y(t).toFixed(1)+'" x2="'+(W-MR)+'" y2="'+Y(t).toFixed(1)+'"></line>'+
+                 (Math.abs(Y(t)-Y(cur)) < 16 ? "" :
+                 '<text class="tick" x="'+(W-MR+7)+'" y="'+(Y(t)+4).toFixed(1)+'">'+fmt(t,0)+'</text>')).join("")+
+    Object.keys(yrs).map(y=>'<text class="tick" x="'+X(yrs[y]).toFixed(1)+'" y="'+(H-6)+'">'+esc(y)+'</text>').join("")+
+    '<path d="'+path+'" fill="none" stroke="var(--s1)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></path>'+
+    '<circle cx="'+X(S.length-1).toFixed(1)+'" cy="'+Y(cur).toFixed(1)+'" r="4.5" fill="var(--s1)" stroke="var(--surface-1)" stroke-width="2"></circle>'+
+    '<text x="'+(W-MR+7)+'" y="'+(Y(cur)+4).toFixed(1)+'" style="fill:var(--s1);font-size:12px;font-weight:700">'+fmt(cur,0)+'</text>'+
+    '<line class="baseline" id="fxcross" x1="0" y1="'+MT+'" x2="0" y2="'+(H-MB)+'" opacity="0"></line>'+
+    '<rect x="0" y="0" width="'+W+'" height="'+H+'" fill="transparent" id="fxhit"></rect>'+
+  '</svg>';
+  box.innerHTML = svg;
+
+  const svgEl = box.querySelector("svg"), cross = box.querySelector("#fxcross");
+  box.querySelector("#fxhit").addEventListener("mousemove", ev=>{
+    const r = svgEl.getBoundingClientRect();
+    const px = (ev.clientX - r.left) / r.width * W;
+    let i = Math.round((px - ML) / (W-ML-MR) * (S.length-1));
+    i = clamp(i, 0, S.length-1);
+    const p = S[i];
+    cross.setAttribute("x1", X(i)); cross.setAttribute("x2", X(i)); cross.setAttribute("opacity","1");
+    tip.style.opacity = 1;
+    tip.innerHTML = esc(p.d) + " · <b>" + fmt(p.c,2) + "원</b>";
+    const left = clamp(X(i)/W * r.width - 60, 0, r.width - 130);
+    tip.style.left = left + "px";
+    tip.style.top  = (Y(p.c)/H * r.height - 42) + "px";
+  });
+  box.addEventListener("mouseleave", ()=>{ tip.style.opacity = 0; cross.setAttribute("opacity","0"); });
+}
+
+/* --- ETF 테이블 --- */
+let curFilter = "전체", sortKey = null, sortDir = "desc";
+function renderTable(A){
+  const cats = ["전체"].concat(Array.from(new Set(ETFS.map(e=>e.cat))));
+  $("filters").innerHTML = cats.map(c =>
+    '<button class="fbtn" data-c="'+c+'" aria-pressed="'+(c===curFilter)+'">'+c+'</button>').join("");
+  $("filters").querySelectorAll(".fbtn").forEach(b=>{
+    b.onclick = ()=>{ curFilter = b.dataset.c; renderTable(A); };
+  });
+
+  const catOrder = {};
+  cats.slice(1).forEach((c,i)=>{ catOrder[c] = i; });
+  const rows = ETFS
+    .filter(e => curFilter==="전체" || e.cat===curFilter)
+    // 규모 미달은 점수 자체를 무효화 — 정렬에서도 매수 후보로 올라오지 않게
+    .map(e => ({ e, sc: e.aum < 1000 ? null : etfScore(e.m, A) }));
+
+  if (sortKey){
+    // 값이 없는 행(보수 미확인, 파킹용 등)은 정렬 방향과 무관하게 항상 뒤로
+    const val = r => sortKey==="aum" ? r.e.aum : sortKey==="ter" ? r.e.ter : r.sc;
+    rows.sort((a,b)=>{
+      const x = val(a), y = val(b);
+      if (x == null && y == null) return 0;
+      if (x == null) return 1;
+      if (y == null) return -1;
+      return sortDir === "desc" ? y - x : x - y;
+    });
+  } else {
+    rows.sort((a,b)=> (catOrder[a.e.cat] - catOrder[b.e.cat]) || (b.e.aum - a.e.aum));
+  }
+
+  document.querySelectorAll("th.sortable").forEach(th=>{
+    if (th.dataset.k === sortKey) th.setAttribute("aria-sort", sortDir==="desc" ? "descending" : "ascending");
+    else th.removeAttribute("aria-sort");
+    th.onclick = ()=>{
+      if (sortKey === th.dataset.k) sortDir = sortDir==="desc" ? "asc" : "desc";
+      else { sortKey = th.dataset.k; sortDir = th.dataset.k==="ter" ? "asc" : "desc"; }
+      renderTable(A);
+    };
+  });
+
+  $("etfbody").innerHTML = rows.map(({e, sc})=>{
+    // 규모 가드레일 — 순자산이 작으면 점수와 무관하게 매수 신호를 내지 않는다
+    let s;
+    if (e.aum < 1000)     s = { t:"규모 미달 · 권장 안 함", c:"var(--crit-ink)", dot:"var(--crit)" };
+    else if (sc == null)  s = { t:"안전자산 채우기용", c:"var(--ink-2)", dot:"var(--ink-3)" };
+    else                  s = sigLabel(sc);
+    return '<tr>'+
+      '<td><div class="nm">'+e.n+'</div>'+
+          '<div class="code">'+e.c+' · '+e.cat+'</div></td>'+
+      '<td class="num">'+aumTxt(e.aum)+'</td>'+
+      '<td class="num">'+(e.ter==null?'<span style="color:var(--ink-3)">확인 필요</span>':e.ter.toFixed(2)+"%")+'</td>'+
+      '<td style="white-space:nowrap;font-size:12px;color:var(--ink-2)">'+e.fx+'</td>'+
+      '<td><span class="sig" style="color:'+s.c+'"><span class="dot" style="background:'+s.dot+'"></span>'+s.t+'</span>'+
+          (sc==null?'':'<div class="code" style="margin-top:2px">'+sc.toFixed(0)+'점</div>')+'</td>'+
+      '<td><div class="note" style="color:var(--ink-2)">'+(e.memo||"—")+'</div></td>'+
+    '</tr>';
+  }).join("");
+}
+
+/* --- 산업군 카드 --- */
+let secFilter = "전체";
+function renderSectors(A){
+  const groups = ["전체"].concat(Array.from(new Set(SECTORS.map(s=>s.group))));
+  $("secfilters").innerHTML = groups.map(g =>
+    '<button class="fbtn" data-g="'+g+'" aria-pressed="'+(g===secFilter)+'">'+g+'</button>').join("");
+  $("secfilters").querySelectorAll(".fbtn").forEach(b=>{
+    b.onclick = ()=>{ secFilter = b.dataset.g; renderSectors(A); };
+  });
+
+  const list = SECTORS
+    .filter(s => secFilter==="전체" || s.group===secFilter)
+    .map(s => ({ s, v: sectorScore(s, A) }))
+    .sort((a,b)=> b.v - a.v);
+
+  $("secgrid").innerHTML = list.map(({s, v})=>{
+    const buyable = (s.etfs||[]).filter(e => e.aum >= 1000);
+    const sig = buyable.length === 0
+      ? { t:"살 상품이 없음", c:"var(--crit-ink)", dot:"var(--crit)" }
+      : sigLabel(v);
+    const top = (s.etfs||[])[0];
+    return '<div class="sec'+(buyable.length?"":" dim")+'">'+
+      '<div class="sec-head">'+
+        '<div><span class="sec-name">'+s.name+'</span>'+
+             '<span class="sec-type">'+TYPE_LABEL[s.type]+'</span></div>'+
+        '<span class="sig" style="color:'+sig.c+'"><span class="dot" style="background:'+sig.dot+'"></span>'+sig.t+'</span>'+
+      '</div>'+
+      '<div class="sec-metrics">'+
+        '<div>고점 대비'+(s.live?' <span style="color:var(--good-ink)">●</span>':'')+'<b>-'+s.dd.toFixed(1)+'%</b></div>'+
+        '<div>200일선<b>'+(s.p200>=0?"+":"")+s.p200.toFixed(1)+'%</b></div>'+
+        '<div>규모 1위<b>'+(top ? aumTxt(top.aum) : "–")+'</b></div>'+
+        '<div>신호 점수<b>'+(buyable.length ? v.toFixed(0) : "–")+'</b></div>'+
+      '</div>'+
+      '<p class="sec-rule">'+s.rule+'</p>'+
+      (s.none ? '<p class="sec-none">'+s.none+'</p>' : '')+
+      '<p class="sec-caution">'+s.caution+'</p>'+
+      '<table class="sec-etfs"><tbody>'+ (s.etfs||[]).map(e=>
+        '<tr>'+
+        '<td><span class="mkt">'+e.mkt+'</span><b>'+e.n+'</b> <span class="code">'+e.c+'</span>'+
+            (e.best?'<span class="best">← '+e.best+'</span>':'')+
+            (e.note?'<div class="note">'+e.note+'</div>':'')+'</td>'+
+        '<td class="e-aum">'+aumTxt(e.aum)+'</td>'+
+        '<td class="e-ter">'+(e.ter==null?'–':e.ter.toFixed(2)+'%')+'</td>'+
+        '</tr>').join("") +'</tbody></table>'+
+    '</div>';
+  }).join("");
+}
+
+/* ============================================================
+   8. ETF 구성종목 (룩스루용) — 운용사 공시/집계 사이트, 2026-06~07 기준
+   underCount: 다른 ETF·선물을 담고 있어 실제 종목 노출이 표시보다 큰 경우
+   ============================================================ */
+const HOLDINGS = {
+ "360750": {u:false, h:[["NVDA 엔비디아",7.9],["AAPL 애플",7.4],["알파벳(구글)",5.6],["MSFT 마이크로소프트",4.5],
+   ["AMZN 아마존",3.7],["AVGO 브로드컴",2.9],["META 메타",2.1],["MU 마이크론",1.7],["TSLA 테슬라",1.6]]},
+ "379800": {u:false, ref:"360750"},
+ "360200": {u:false, ref:"360750"},
+ "449180": {u:false, ref:"360750"},
+ "133690": {u:false, h:[["NVDA 엔비디아",8.0],["AAPL 애플",8.0],["알파벳(구글)",6.4],["MSFT 마이크로소프트",4.8],
+   ["AMZN 아마존",4.4],["MU 마이크론",4.3],["AMD",3.7],["META 메타",3.1],["TSLA 테슬라",3.1]]},
+ "379810": {u:false, ref:"133690"},
+ "367380": {u:false, ref:"133690"},
+ "449190": {u:false, ref:"133690"},
+ "381170": {u:false, h:[["NVDA 엔비디아",18.9],["AAPL 애플",18.4],["알파벳(구글)",17.1],["MSFT 마이크로소프트",11.1],
+   ["AMZN 아마존",9.6],["AVGO 브로드컴",7.0],["META 메타",6.6],["TSLA 테슬라",4.4],["MU 마이크론",3.9],["AMD",3.3]]},
+ "465580": {u:false, h:[["AAPL 애플",16.9],["NVDA 엔비디아",15.5],["알파벳(구글)",14.4],["AMZN 아마존",14.1],
+   ["MSFT 마이크로소프트",14.1],["AVGO 브로드컴",10.0],["META 메타",9.0],["MU 마이크론",3.4],["TSLA 테슬라",1.6],["NFLX 넷플릭스",1.0]]},
+ "381180": {u:false, h:[["NVDA 엔비디아",12.3],["AVGO 브로드컴",8.9],["MU 마이크론",8.3],["AMAT 어플라이드머티리얼즈",5.4],
+   ["KLAC KLA",4.9],["ASML",4.5],["LRCX 램리서치",4.4],["MRVL 마벨",4.4],["AMD",4.3],["TSM TSMC",4.1]]},
+ "390390": {u:false, h:[["NVDA 엔비디아",18.1],["TSM TSMC",9.1],["MU 마이크론",6.0],["AVGO 브로드컴",5.5],["AMD",5.4],
+   ["AMAT 어플라이드머티리얼즈",5.4],["INTC 인텔",5.1],["LRCX 램리서치",5.0],["KLAC KLA",5.0],["ASML",4.9]]},
+ "458730": {u:false, h:[["ABT 애보트",4.5],["UNH 유나이티드헬스",4.5],["MRK 머크",4.3],["AMGN 암젠",4.2],["PG P&G",4.2],
+   ["HD 홈디포",4.1],["KO 코카콜라",4.1],["CVX 셰브론",4.0],["TXN 텍사스인스트루먼트",3.7],["COP 코노코필립스",3.7]]},
+ "446720": {u:false, ref:"458730"},
+ "0060H0": {u:true, h:[["NVDA 엔비디아",4.3],["AAPL 애플",4.1],["알파벳(구글)",3.1],["MSFT 마이크로소프트",2.5],
+   ["AMZN 아마존",2.1],["AVGO 브로드컴",1.6],["TSM TSMC",1.5]]},
+ "251350": {u:true, h:[["AAPL 애플",5.0],["NVDA 엔비디아",5.0],["알파벳(구글)",3.8],["MSFT 마이크로소프트",2.9],
+   ["AMZN 아마존",2.5],["AVGO 브로드컴",1.8],["META 메타",1.5],["MU 마이크론",1.1]]},
+ "069500": {u:false, h:[["삼성전자",33.1],["SK하이닉스",32.0],["SK스퀘어",3.3],["삼성전기",2.5],["현대차",1.5],
+   ["KB금융",1.0],["삼성물산",1.0],["신한지주",0.9],["두산에너빌리티",0.8],["삼성생명",0.8]]},
+ "102110": {u:false, ref:"069500"}, "278530": {u:false, ref:"069500"}, "148020": {u:false, ref:"069500"},
+ "396500": {u:false, h:[["삼성전자",29.3],["SK하이닉스",27.0],["SK스퀘어",21.9],["한미반도체",4.6],["주성엔지니어링",4.1],
+   ["이수페타시스",3.8],["원익IPS",2.8],["DB하이텍",2.4],["리노공업",2.2],["이오테크닉스",2.0]]},
+ "091160": {u:false, h:[["SK하이닉스",42.7],["삼성전자",21.5],["한미반도체",5.4],["주성엔지니어링",2.7],["원익IPS",2.6],
+   ["DB하이텍",2.2],["리노공업",2.1],["이오테크닉스",1.9],["피에스케이",1.7],["HPSP",1.7]]},
+ "487240": {u:false, h:[["효성중공업",20.9],["LS ELECTRIC",20.2],["HD현대일렉트릭",18.8],["LS",13.7],["대한전선",8.9],
+   ["산일전기",6.6],["일진전기",3.9],["가온전선",2.4],["LS에코에너지",1.3],["대원전선",1.2]]},
+ "449450": {u:false, h:[["한화에어로스페이스",20.8],["한화오션",20.0],["한국항공우주",17.1],["현대로템",15.9],
+   ["LIG디펜스앤에어로스페이스",15.5],["한화시스템",7.5],["풍산",1.9],["STX엔진",0.6],["SNT다이내믹스",0.5]]},
+ "091170": {u:false, h:[["신한지주",23.2],["하나금융지주",21.2],["KB금융",20.8],["우리금융지주",15.7],["카카오뱅크",5.8],
+   ["기업은행",4.5],["BNK금융지주",3.7],["JB금융지주",3.2],["iM금융지주",1.9]]},
+ "466940": {u:false, ref:"091170"},
+ "138540": {u:false, h:[["기아",27.3],["현대차",20.6],["현대모비스",15.5],["현대제철",9.0],["현대글로비스",7.2],
+   ["현대건설",4.2],["HD한국조선해양",3.9],["HD현대",2.7],["현대로템",1.8],["현대위아",1.7]]},
+ "305720": {u:false, h:[["LG에너지솔루션",21.3],["삼성SDI",15.7],["POSCO홀딩스",12.7],["LG화학",10.6],["에코프로비엠",8.9],
+   ["에코프로",8.0],["포스코퓨처엠",5.1],["SK이노베이션",4.3],["엘앤에프",2.6],["서진시스템",1.7]]},
+ "445290": {u:false, h:[["삼성전자",11.7],["로보티즈",8.4],["현대모비스",7.4],["SK하이닉스",7.0],["LG전자",6.9],
+   ["현대오토에버",6.6],["레인보우로보틱스",6.3],["두산로보틱스",5.8],["현대차",5.6],["NAVER",4.1]]},
+ "466920": {u:false, h:[["삼성중공업",25.5],["한화오션",24.8],["HD현대중공업",22.8],["HD한국조선해양",16.6],
+   ["HD현대마린솔루션",3.1],["한화엔진",2.7],["HD현대마린엔진",1.4],["한국카본",0.7],["대한조선",0.5]]}
+};
+const holdingsOf = c => { const x = HOLDINGS[c]; if(!x) return null;
+  return x.ref ? {u:x.u, h:HOLDINGS[x.ref].h} : x; };
+
+/* 선택 가능한 전체 ETF (코어 + 산업군) */
+function allEtfs(){
+  const out = [], seen = new Set();
+  ETFS.forEach(e => { if(!seen.has(e.c)){ seen.add(e.c);
+    out.push({c:e.c, n:e.n, aum:e.aum, safe: e.cat==="채권·안전", cat:e.cat}); }});
+  SECTORS.forEach(s => (s.etfs||[]).forEach(e => { if(!seen.has(e.c)){ seen.add(e.c);
+    out.push({c:e.c, n:e.n, aum:e.aum, safe:false, cat:s.name}); }}));
+  return out.sort((a,b)=> b.aum - a.aum);
+}
+const etfByCode = c => allEtfs().find(e => e.c === c);
+
+/* ============================================================
+   9. 포트폴리오 — 입력 상태를 주소창 해시에 저장 (localStorage 미사용)
+   ============================================================ */
+let PF = [];
+function pfSave(){
+  const compact = PF.filter(r=>r.c).map(r => r.c + ":" + (r.v||0)).join(",");
+  const cur = /[#&]d=([^&]+)/.exec(location.hash);
+  const parts = [];
+  if (compact) parts.push("p=" + encodeURIComponent(compact));
+  if (cur) parts.push("d=" + cur[1]);
+  history.replaceState(null, "", parts.length ? "#" + parts.join("&") : location.pathname);
+}
+function pfLoad(){
+  const m = /[#&]p=([^&]+)/.exec(location.hash);
+  if (!m) return;
+  try{
+    PF = decodeURIComponent(m[1]).split(",").filter(Boolean).map(s=>{
+      const [c,v] = s.split(":"); return { c, v: parseFloat(v)||0 };
+    });
+  }catch(e){ PF = []; }
+}
+function renderPfRows(A){
+  const opts = allEtfs();
+  $("pf-rows").innerHTML = PF.map((r,i)=>
+    '<div class="pf-row">'+
+      '<select data-i="'+i+'" data-f="c"><option value="">— ETF 선택 —</option>'+
+        opts.map(o=>'<option value="'+o.c+'"'+(o.c===r.c?' selected':'')+'>'+esc(o.n)+' ('+o.c+')</option>').join("")+
+      '</select>'+
+      '<input type="number" min="0" step="10" data-i="'+i+'" data-f="v" value="'+(r.v||"")+'" placeholder="만원">'+
+      '<button class="del" data-i="'+i+'" title="삭제">×</button>'+
+    '</div>').join("") || '<p class="sub">아래 「+ 종목 추가」로 보유 종목을 넣어보세요.</p>';
+
+  $("pf-rows").querySelectorAll("select,input").forEach(el=>{
+    el.onchange = ()=>{
+      const i = +el.dataset.i;
+      PF[i][el.dataset.f] = el.dataset.f==="v" ? (parseFloat(el.value)||0) : el.value;
+      pfSave(); renderPf(A);
+    };
+  });
+  $("pf-rows").querySelectorAll(".del").forEach(b=>{
+    b.onclick = ()=>{ PF.splice(+b.dataset.i,1); pfSave(); renderPf(A); };
+  });
+}
+
+/* 룩스루: 보유 ETF 구성종목을 합산 */
+function lookThrough(){
+  const exp = {}, noData = [], under = [];
+  let covered = 0, total = 0;
+  PF.forEach(r=>{
+    if (!r.c || !(r.v>0)) return;
+    total += r.v;
+    const H = holdingsOf(r.c), meta = etfByCode(r.c);
+    if (!H){ noData.push(meta ? meta.n : r.c); return; }
+    covered += r.v;
+    if (H.u) under.push(meta ? meta.n : r.c);
+    H.h.forEach(([nm,pct])=>{ exp[nm] = (exp[nm]||0) + r.v * pct/100; });
+  });
+  const rows = Object.keys(exp).map(k=>({ n:k, amt:exp[k], pct: total? exp[k]/total*100 : 0 }))
+                     .sort((a,b)=> b.amt - a.amt);
+  return { rows, total, covered, noData, under };
+}
+
+function renderOverlap(){
+  const box = $("ov-result");
+  const { rows, total, covered, noData, under } = lookThrough();
+  if (!total){ box.innerHTML = '<p class="sub">위에 보유 종목을 입력하면 여기에 결과가 나옵니다.</p>'; return; }
+  if (!rows.length){ box.innerHTML = '<p class="sub">입력하신 ETF는 구성종목 데이터를 아직 넣어두지 않았습니다.</p>'; return; }
+
+  const top = rows.slice(0, 12);
+  const max = top[0].pct;
+  const top5 = rows.slice(0,5).reduce((a,b)=>a+b.pct,0);
+  const covRatio = covered/total*100;
+
+  let alert = "";
+  if (top[0].pct >= 15) alert = '<div class="alert bad"><b>⚠ '+esc(top[0].n)+' 한 종목이 전체의 '+top[0].pct.toFixed(1)+
+    '%입니다.</b> 여러 ETF에 나눠 담았지만 실질적으로는 이 회사 하나에 집중된 상태입니다. 이 종목이 반토막 나면 포트폴리오 전체가 '+
+    (top[0].pct/2).toFixed(1)+'% 손실을 봅니다.</div>';
+  else if (top5 >= 35) alert = '<div class="alert warn"><b>상위 5개 종목이 '+top5.toFixed(1)+'%</b>를 차지합니다. 분산이 생각보다 얕습니다.</div>';
+  else alert = '<div class="alert ok">상위 5개 종목 합계 '+top5.toFixed(1)+'%로, 특정 종목 쏠림은 두드러지지 않습니다.</div>';
+
+  box.innerHTML =
+    '<div class="kpi" style="grid-template-columns:repeat(3,minmax(0,1fr))">'+
+      '<div><span>최대 단일 종목</span><b>'+top[0].pct.toFixed(1)+'%</b><em>'+esc(top[0].n)+'</em></div>'+
+      '<div><span>상위 5종목 합계</span><b>'+top5.toFixed(1)+'%</b><em>실질 집중도</em></div>'+
+      '<div><span>구성종목 확보 범위</span><b>'+covRatio.toFixed(0)+'%</b><em>나머지는 계산에서 제외</em></div>'+
+    '</div>'+
+    alert +
+    '<p class="sub" style="margin:16px 0 8px"><b>룩스루 상위 종목</b> — 보유 ETF 전체를 하나로 합쳤을 때의 실제 비중</p>'+
+    top.map(r=>
+      '<div class="lt"><div>'+esc(r.n)+'</div>'+
+      '<div><div class="bar'+(r.pct>=15?' hi':'')+'" style="width:'+Math.max(2,(r.pct/max*100)).toFixed(1)+'%"></div></div>'+
+      '<div class="pct">'+r.pct.toFixed(1)+'%</div></div>').join("")+
+    (under.length ? '<p class="note" style="max-width:none;margin-top:12px">※ '+esc(under.join(", "))+
+      ' 은(는) 다른 ETF나 지수선물을 담고 있어, 실제 종목 노출은 위 수치보다 <b>더 큽니다</b>(과소평가).</p>' : '')+
+    (noData.length ? '<p class="note" style="max-width:none">※ 구성종목 미확보로 계산에서 제외: '+esc(noData.join(", "))+'</p>' : '')+
+    '<p class="note" style="max-width:none">※ 각 ETF의 상위 10종목만 반영합니다. 11위 이하가 겹치는 부분은 잡히지 않으므로 실제 집중도는 <b>이 수치 이상</b>입니다.</p>';
+}
+
+/* 포트폴리오 요약 — 위험자산 비중 vs 신호 기반 목표 */
+function renderPf(A){
+  renderPfRows(A);
+  const box = $("pf-result");
+  const valid = PF.filter(r=>r.c && r.v>0);
+  if (!valid.length){ box.innerHTML = ""; renderOverlap(); return; }
+
+  let total=0, safe=0, wScore=0, wBase=0;
+  valid.forEach(r=>{
+    const meta = etfByCode(r.c); if(!meta) return;
+    total += r.v;
+    if (meta.safe) safe += r.v;
+    const core = ETFS.find(e=>e.c===r.c);
+    let sc = core ? etfScore(core.m, A) : null;
+    if (sc == null){
+      const sec = SECTORS.find(s => (s.etfs||[]).some(e=>e.c===r.c));
+      if (sec) sc = sectorScore(sec, A);
+    }
+    if (sc != null){ wScore += sc * r.v; wBase += r.v; }
+  });
+  const riskPct = total ? (total-safe)/total*100 : 0;
+  const targetRisk = clamp(38 + A.score*0.48, 30, 85);      // 신호가 좋을수록 위험자산 목표↑
+  const gap = riskPct - targetRisk;
+  const avgScore = wBase ? wScore/wBase : null;
+
+  let msg, cls;
+  if (gap > 12){ cls="warn"; msg="현재 위험자산 비중이 목표보다 <b>"+gap.toFixed(0)+"%p 높습니다.</b> 지금 시장 신호("+A.score.toFixed(0)+"점)에 비해 공격적입니다. 신규 자금은 채권·파킹 쪽으로 돌려 자연스럽게 비중을 낮추는 편이 낫습니다."; }
+  else if (gap < -12){ cls="ok"; msg="현재 위험자산 비중이 목표보다 <b>"+(-gap).toFixed(0)+"%p 낮습니다.</b> 신호 대비 보수적이라, 여유가 있으면 주식형을 늘릴 여지가 있습니다."; }
+  else { cls="ok"; msg="위험자산 비중이 현재 신호에 <b>대체로 맞습니다.</b> 굳이 손댈 필요는 없어 보입니다."; }
+
+  box.innerHTML =
+    '<div class="kpi">'+
+      '<div><span>총 평가금액</span><b>'+fmt(total,0)+'</b><em>만원</em></div>'+
+      '<div><span>위험자산 비중</span><b>'+riskPct.toFixed(0)+'%</b><em>안전자산 '+(100-riskPct).toFixed(0)+'%</em></div>'+
+      '<div><span>신호 기반 목표</span><b>'+targetRisk.toFixed(0)+'%</b><em>시장 '+A.score.toFixed(0)+'점 기준</em></div>'+
+      '<div><span>보유 종목 평균 신호</span><b>'+(avgScore==null?"–":avgScore.toFixed(0))+'</b><em>금액 가중</em></div>'+
+    '</div>'+
+    '<div class="alert '+cls+'">'+msg+'</div>'+
+    '<p class="note" style="max-width:none">※ IRP·DC 계좌라면 위험자산은 <b>70%가 법정 상한</b>입니다(연금저축은 제한 없음). 목표치가 70%를 넘더라도 IRP에서는 70%까지만 가능합니다.</p>';
+
+  renderOverlap();
+}
+
+/* ============================================================
+   9-B. 분할매수 플래너
+   총액의 80%를 정액 회차로 균등 배분하고, 20%는 '가속 예비'로 남긴다.
+   지수가 200일선을 크게 밑돌 때만 예비를 꺼내 회차 금액을 키운다.
+   (백테스트: 완만한 가감은 정액 대비 -0.2%로 무해, 딱 끊고 기다리는 임계 전략은 -3.3%)
+   ============================================================ */
+let DCA = { total:1200, months:10, mkt:"kr", done:0 };
+const RESERVE_RATIO = 0.20;
+
+function dcaSave(){
+  const cur = /[#&]p=([^&]+)/.exec(location.hash);
+  const pf = cur ? "p=" + cur[1] : "";
+  const d  = "d=" + [DCA.total, DCA.months, DCA.mkt, DCA.done].join(":");
+  history.replaceState(null, "", "#" + [pf, d].filter(Boolean).join("&"));
+}
+function dcaLoad(){
+  const m = /[#&]d=([^&]+)/.exec(location.hash);
+  if (!m) return;
+  const [t, mo, mk, dn] = decodeURIComponent(m[1]).split(":");
+  if (+t > 0) DCA.total = +t;
+  if (+mo >= 2) DCA.months = Math.min(36, +mo);
+  if (mk === "kr" || mk === "us") DCA.mkt = mk;
+  DCA.done = Math.max(0, Math.min(DCA.months, +dn || 0));
+}
+
+/* 200일선 대비 위치 → 회차 배수 */
+function dcaMultiplier(p200){
+  if (p200 == null) return { m:1.0, why:"추세 데이터 없음 — 기본 금액 유지" };
+  if (p200 <= -25)  return { m:2.0, why:"200일선 -25% 이하 — 확실히 싼 구간, 예비 적극 투입" };
+  if (p200 <= -15)  return { m:1.6, why:"200일선 -15% 이하 — 싸진 구간, 예비 일부 투입" };
+  if (p200 <= -5)   return { m:1.25, why:"200일선을 밑돌기 시작 — 소폭 가속" };
+  return              { m:1.0, why:"장기 평균 부근 또는 그 위 — 기본 금액만" };
+}
+
+function renderDca(A){
+  const box = $("dca-result");
+  const N = DCA.months, total = DCA.total;
+  if (!(total > 0) || !(N >= 2)){ box.innerHTML = '<p class="sub">총액과 기간을 입력해 주세요.</p>'; return; }
+
+  const reserve = total * RESERVE_RATIO;
+  const basePer = (total - reserve) / N;
+  const p200 = DCA.mkt === "kr" ? A.kr.p200
+             : (D.spxMa200 ? (D.spx.v / D.spxMa200 - 1) * 100 : null);
+  const mk = dcaMultiplier(p200);
+
+  const invested = DCA.done * basePer;
+  const remain   = total - invested;
+  const thisRound = Math.min(basePer * mk.m, remain);
+  const pct = DCA.done / N * 100;
+
+  const now = new Date();
+  const label = i => { const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    return (d.getMonth() + 1) + "월"; };
+
+  box.innerHTML =
+    '<div class="kpi">'+
+      '<div><span>회차당 기본</span><b>'+fmt(basePer,0)+'</b><em>'+N+'회 · 총액의 '+((1-RESERVE_RATIO)*100).toFixed(0)+'%</em></div>'+
+      '<div><span>가속 예비</span><b>'+fmt(reserve,0)+'</b><em>싸질 때만 꺼내 쓰는 실탄</em></div>'+
+      '<div><span>이번 회차 권장</span><b style="color:'+(mk.m>1?"var(--good-ink)":"var(--ink-1)")+'">'+fmt(thisRound,0)+'</b>'+
+        '<em>기본 × '+mk.m.toFixed(2)+'배</em></div>'+
+      '<div><span>진행</span><b>'+DCA.done+' / '+N+'</b><em>투입 '+fmt(invested,0)+' · 잔여 '+fmt(remain,0)+'</em></div>'+
+    '</div>'+
+    '<div class="prog"><i style="width:'+pct.toFixed(1)+'%"></i></div>'+
+    '<p class="note" style="max-width:none">'+
+      (DCA.mkt==="kr" ? "코스피" : "S&P500")+' 200일선 대비 '+
+      (p200==null ? "–" : (p200>=0?"+":"")+p200.toFixed(1)+"%")+' → '+esc(mk.why)+'</p>'+
+    '<div class="alert '+(mk.m>1.3?"ok":"warn")+'" style="margin-top:12px">'+
+      (mk.m > 1.3
+        ? "<b>지금은 가속 구간입니다.</b> 예비 실탄을 꺼내 회차 금액을 늘릴 때입니다. 다만 예비를 한 번에 다 쓰지는 마세요."
+        : "<b>지금은 기본 금액만 넣으세요.</b> 고점 대비 낙폭이 커 보여도 장기 평균 대비로는 아직 싸지 않습니다. "+
+          "예비 "+fmt(reserve,0)+"만원은 더 빠졌을 때를 위해 남겨두는 게 이 계획의 핵심입니다.")+
+    '</div>'+
+    '<p class="sub" style="margin:16px 0 0"><b>회차 체크</b> — 매수할 때마다 눌러 진행을 기록하세요</p>'+
+    '<div class="sched">'+
+      Array.from({length:N}, (_,i)=>
+        '<button data-i="'+i+'" aria-pressed="'+(i < DCA.done)+'">'+
+          (i < DCA.done ? '<span class="chk">✓</span>' : '')+
+          (i+1)+'회 · '+label(i)+'<b>'+fmt(basePer,0)+'만</b></button>').join("")+
+    '</div>'+
+    '<p class="note" style="max-width:none;margin-top:12px">'+
+      '※ 지수가 올라도 <b>회차를 건너뛰지 마세요.</b> 백테스트에서 "기준 미달이면 아예 안 사기"는 정액 적립보다 3.3% 뒤졌습니다. '+
+      '멈추는 게 아니라 <b>금액을 완만하게 조절</b>하는 것이 이 계획의 방식입니다.</p>'+
+      (DCA.mkt==="kr" ? '<p class="note" style="max-width:none">※ 코스피 지수형(KODEX 200 등)은 삼성전자+SK하이닉스가 65%입니다. '+
+      '이 계획 전액을 코스피 하나에 넣으면 사실상 반도체 두 종목 분할매수가 됩니다.</p>' : '');
+
+  box.querySelectorAll(".sched button").forEach(b=>{
+    b.onclick = ()=>{ const i = +b.dataset.i;
+      DCA.done = (i + 1 === DCA.done) ? i : i + 1;   // 같은 칸 다시 누르면 취소
+      dcaSave(); renderDca(A); };
+  });
+}
+
+function wireDca(A){
+  const bind = (id, key, num)=>{ const el = $(id);
+    el.value = DCA[key];
+    el.onchange = ()=>{ DCA[key] = num ? (parseFloat(el.value)||0) : el.value;
+      DCA.done = Math.min(DCA.done, DCA.months); dcaSave(); renderDca(A); };
+  };
+  bind("dca-total","total",true); bind("dca-months","months",true); bind("dca-mkt","mkt",false);
+}
+
+function wireBt(A){
+  const btn = $("bt-run");
+  btn.onclick = ()=>{ btn.disabled = true; btn.textContent = "계산 중…"; runBacktest(A)
+    .finally(()=>{ btn.disabled = false; btn.textContent = "↻ 다시 돌리기"; }); };
+}
+
+function wirePf(A){
+  $("pf-add").onclick   = ()=>{ PF.push({c:"",v:0}); pfSave(); renderPf(A); };
+  $("pf-clear").onclick = ()=>{ PF = []; pfSave(); renderPf(A); };
+  $("pf-demo").onclick  = ()=>{ PF = [{c:"360750",v:1200},{c:"133690",v:800},
+                                     {c:"381170",v:500},{c:"465580",v:300},
+                                     {c:"069500",v:400}]; pfSave(); renderPf(A); };
+}
+
+/* ============================================================
+   10. 백테스트 — 신호 기반 적립 vs 무지성 정액 적립
+   ============================================================ */
+const BT = { done:false };
+
+async function runBacktest(A){
+  const st = $("bt-status");
+  st.style.display = ""; $("bt-result").style.display = "none";
+  st.textContent = "과거 시세를 받는 중입니다… (S&P500 · VIX · 원달러, 최대 15년)";
+
+  const [spxH, vixH] = await Promise.all([ stooqDaily("^spx", 5900), stooqDaily("^vix", 5900) ]);
+  let fx = null;
+  for (const from of ["2011-01-01","2016-01-01","2020-01-01"]){
+    const j = await J("https://api.frankfurter.dev/v1/"+from+"..?base=USD&symbols=KRW");
+    if (j && j.rates){
+      const arr = Object.keys(j.rates).sort().map(k=>({d:k, c:j.rates[k].KRW})).filter(x=>isFinite(x.c));
+      if (arr.length > 700){ fx = arr; break; }
+    }
+  }
+  if (!spxH || !vixH || !fx || spxH.length < 700){
+    st.innerHTML = '⚠ 과거 시세를 받지 못해 백테스트를 돌리지 못했습니다. '+
+      '브라우저가 stooq.com 또는 frankfurter.dev 호출을 차단하고 있을 수 있습니다. '+
+      '「↻ 새로고침」을 눌러 다시 시도해 보세요.';
+    return;
+  }
+
+  const vixMap = {}; vixH.forEach(x=> vixMap[x.d] = x.c);
+  const fxMap  = {}; fx.forEach(x=> fxMap[x.d] = x.c);
+  const fxDates = fx.map(x=>x.d), fxVals = fx.map(x=>x.c);
+
+  // 직전 영업일 값으로 메우기
+  const carry = (map, dates, d) => {
+    if (map[d] != null) return map[d];
+    let lo=0, hi=dates.length-1, best=null;
+    while(lo<=hi){ const m=(lo+hi)>>1; if(dates[m]<=d){ best=dates[m]; lo=m+1; } else hi=m-1; }
+    return best==null ? null : map[best];
+  };
+  const vixDates = vixH.map(x=>x.d);
+
+  // 월별 진입 시점 (각 월 첫 거래일)
+  const months = [];
+  let curM = "";
+  spxH.forEach((p,i)=>{
+    const m = p.d.slice(0,7);
+    if (m !== curM && i >= 260){ curM = m; months.push(i); }
+  });
+  if (months.length < 60){ st.textContent = "⚠ 백테스트에 필요한 기간이 부족합니다."; return; }
+
+  const C = 100;                       // 매달 100만원 (단위: 만원)
+  const cashRate = Math.pow(1.025, 1/12) - 1;
+  const S = { A:{u:0,cash:0,name:"정액 적립"}, B:{u:0,cash:0,name:"신호 가중"}, C:{u:0,cash:0,name:"신호 임계"} };
+  const series = [];
+  let contributed = 0;
+
+  months.forEach(idx=>{
+    const p = spxH[idx], px = p.c, d = p.d;
+    const vix = carry(vixMap, vixDates, d);
+    const rate = carry(fxMap, fxDates, d);
+    if (vix == null || rate == null) return;
+
+    const win = spxH.slice(Math.max(0,idx-252), idx+1).map(x=>x.c);
+    const hi  = Math.max.apply(null, win);
+    const ma  = avg(spxH.slice(Math.max(0,idx-200), idx+1).map(x=>x.c));
+    const dd  = (hi - px)/hi*100;
+    const p200= (px/ma - 1)*100;
+
+    // 환율 3년 롤링 백분위
+    let fxPct = 50;
+    const fi = fxDates.findIndex(x => x >= d);
+    if (fi > 300){
+      const w = fxVals.slice(Math.max(0, fi-756), fi+1);
+      fxPct = w.filter(x=>x<=rate).length / w.length * 100;
+    }
+
+    const vixS = clamp((vix-19)/6,-2,2);
+    const ddS  = clamp((dd-3)/6,-2,2);
+    const maS  = clamp(-(p200-3)/6,-2,2);
+    const fxS  = clamp((50-fxPct)/20,-2,2);
+    const fear = avg([vixS, ddS, maS]);
+    const comp = 0.667*fear + 0.333*fxS;
+    const score = clamp((comp+2)/4*100, 0, 100);
+
+    const priceKrw = px * rate / 10000;      // 만원 단위
+    contributed += C;
+
+    // A. 정액
+    S.A.u += C / priceKrw;
+    // B. 신호 가중 (0.4배 ~ 2.0배, 현금 한도 내)
+    S.B.cash *= (1+cashRate);
+    const want = C * (0.4 + 1.6*(score/100));
+    const spendB = Math.min(want, S.B.cash + C);
+    S.B.u += spendB / priceKrw;
+    S.B.cash += C - spendB;
+    // C. 신호 임계 (52점 이상일 때만, 그때는 쌓인 현금까지 전부)
+    S.C.cash *= (1+cashRate);
+    if (score >= 52){ const spendC = S.C.cash + C; S.C.u += spendC/priceKrw; S.C.cash = 0; }
+    else S.C.cash += C;
+
+    series.push({ d, score,
+      A: S.A.u*priceKrw, B: S.B.u*priceKrw + S.B.cash, C: S.C.u*priceKrw + S.C.cash, inv: contributed });
+  });
+
+  const mdd = key => { let peak=-1e9, worst=0;
+    series.forEach(s=>{ peak = Math.max(peak, s[key]); worst = Math.min(worst, s[key]/peak - 1); });
+    return -worst*100; };
+  // 월별 현금흐름 IRR (이분법)
+  const irr = key => {
+    const cf = series.map(()=> -C); cf[cf.length-1] += series[series.length-1][key];
+    const npv = r => cf.reduce((a,c,i)=> a + c/Math.pow(1+r, i), 0);
+    let lo=-0.9, hi=1.0;
+    for (let i=0;i<200;i++){ const m=(lo+hi)/2; if (npv(m) > 0) lo=m; else hi=m; }
+    return (Math.pow(1+(lo+hi)/2, 12) - 1) * 100;
+  };
+
+  BT.series = series; BT.contributed = contributed; BT.done = true;
+  BT.stats = ["A","B","C"].map(k=>({
+    k, name: S[k].name, final: series[series.length-1][k],
+    ret: series[series.length-1][k]/contributed*100 - 100,
+    cagr: irr(k), mdd: mdd(k),
+    desc: k==="A" ? "매달 100만원을 시장 상황과 무관하게 기계적으로 매수"
+        : k==="B" ? "매달 예산 100만원, 신호에 따라 0.4~2.0배로 조절. 덜 산 달은 현금으로 쌓아뒀다 나중에 사용"
+        : "신호 52점 이상일 때만 매수하되, 그때는 쌓아둔 현금까지 전부 투입"
+  }));
+  BT.from = series[0].d; BT.to = series[series.length-1].d;
+  st.style.display = "none"; $("bt-result").style.display = "";
+  renderBacktest();
+}
+
+function renderBacktest(){
+  if (!BT.done) return;
+  const S = BT.series, base = BT.stats.find(x=>x.k==="A");
+  const COL = { A:"var(--s1)", B:"var(--s2)", C:"var(--s3)" };
+
+  $("bt-body").innerHTML = BT.stats.map(s=>{
+    const diff = s.k==="A" ? null : s.final - base.final;
+    return '<tr>'+
+      '<td><span class="dot" style="display:inline-block;background:'+COL[s.k]+';margin-right:7px"></span><b>'+s.name+'</b>'+
+        (diff==null?'':'<div class="code" style="margin-top:2px;color:'+(diff>=0?'var(--good-ink)':'var(--crit-ink)')+
+          '">정액 대비 '+(diff>=0?'+':'')+fmt(diff,0)+'만원 ('+(diff/base.final*100>=0?'+':'')+(diff/base.final*100).toFixed(1)+'%)</div>')+'</td>'+
+      '<td class="num"><b>'+fmt(s.final,0)+'</b>만원</td>'+
+      '<td class="num">'+fmt(BT.contributed,0)+'만원</td>'+
+      '<td class="num">'+(s.ret>=0?'+':'')+s.ret.toFixed(1)+'%</td>'+
+      '<td class="num">'+s.cagr.toFixed(1)+'%</td>'+
+      '<td class="num">-'+s.mdd.toFixed(1)+'%</td>'+
+      '<td><div class="note" style="color:var(--ink-2)">'+s.desc+'</div></td></tr>';
+  }).join("");
+
+  const bestAlt = BT.stats.filter(s=>s.k!=="A").sort((a,b)=>b.final-a.final)[0];
+  const edge = (bestAlt.final - base.final)/base.final*100;
+  let verdict;
+  if (edge < 2 && edge > -2) verdict = '<b>결론: 신호가 정액 적립을 의미 있게 이기지 못했습니다.</b> 최선의 신호 전략도 차이가 '+
+    edge.toFixed(1)+'%에 그칩니다. 이 정도 차이는 시작·종료 시점을 조금만 바꿔도 뒤집히는 수준이라 <b>실력이 아니라 우연</b>으로 봐야 합니다. '+
+    '그렇다면 이 대시보드의 올바른 사용법은 "언제 살지 고르는 도구"가 아니라 <b>"무엇을 살지 고르고, 비싼 걸 피하는 도구"</b>입니다. 적립은 기계적으로 하세요.';
+  else if (edge >= 2) verdict = '<b>결론: 신호 전략('+bestAlt.name+')이 정액 적립을 '+edge.toFixed(1)+'% 앞섰습니다.</b> '+
+    '다만 이건 한 구간·한 자산(S&P500)에서의 결과이고, 축소판 신호로만 검증한 것입니다. '+bestAlt.mdd.toFixed(0)+'%의 최대낙폭을 견딜 수 있는지도 함께 보세요.';
+  else verdict = '<b>결론: 신호 전략이 정액 적립보다 '+(-edge).toFixed(1)+'% 뒤처졌습니다.</b> '+
+    '기다리는 동안 놓친 상승이 저가 매수 이득보다 컸다는 뜻입니다. 장기 우상향 자산에서는 흔한 결과이며, '+
+    '<b>타이밍을 재는 대신 기계적으로 적립하는 편이 낫다</b>는 근거로 읽는 게 맞습니다.';
+  $("bt-verdict").innerHTML = verdict + '<br><span style="color:var(--ink-3);font-size:12.5px">검증 구간 '+
+    esc(BT.from)+' ~ '+esc(BT.to)+' · 매달 100만원 · 대상 S&P500(원화 환산, 환노출)</span>';
+
+  // --- 차트 ---
+  const W=1000, H=300, ML=8, MR=64, MT=14, MB=26;
+  const all = S.flatMap(s=>[s.A,s.B,s.C]);
+  const y1 = Math.max.apply(null, all)*1.04, y0 = 0;
+  const X = i => ML + i/(S.length-1)*(W-ML-MR);
+  const Y = v => MT + (1-(v-y0)/(y1-y0))*(H-MT-MB);
+  const path = k => "M" + S.map((s,i)=> X(i).toFixed(1)+","+Y(s[k]).toFixed(1)).join(" L");
+  const SHORT = { A:"정액", B:"가중", C:"임계" };
+  // 끝값이 겹치면 라벨이 포개지므로 최소 13px 간격으로 밀어낸다
+  const endLabels = ()=>{
+    const L = BT.stats.map(s=>({ k:s.k, y:Y(s.final) })).sort((a,b)=>a.y-b.y);
+    for (let i=1;i<L.length;i++) if (L[i].y - L[i-1].y < 13) L[i].y = L[i-1].y + 13;
+    return L.map(l=>'<text x="'+(W-MR+7)+'" y="'+(l.y+4).toFixed(1)+
+      '" style="fill:'+COL[l.k]+';font-size:11px;font-weight:700">'+SHORT[l.k]+'</text>').join("");
+  };
+
+  const step = Math.pow(10, Math.floor(Math.log10(y1/4)));
+  const tickStep = Math.ceil(y1/4/step)*step;
+  const ticks = []; for(let t=tickStep; t<y1; t+=tickStep) ticks.push(t);
+  const yrs = {}; S.forEach((s,i)=>{ const y=esc(s.d).slice(0,4); if(!(y in yrs)) yrs[y]=i; });
+  const yrKeys = Object.keys(yrs).filter((y,i)=> i % Math.ceil(Object.keys(yrs).length/8) === 0);
+
+  $("bt-chart").innerHTML =
+  '<div class="legend">'+ BT.stats.map(s=>'<span><i style="background:'+COL[s.k]+'"></i>'+s.name+'</span>').join("")+
+    '<span><i style="background:var(--axis)"></i>누적 투입원금</span></div>'+
+  '<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="전략별 평가액 추이">'+
+    ticks.map(t=>'<line class="gridline" x1="'+ML+'" y1="'+Y(t).toFixed(1)+'" x2="'+(W-MR)+'" y2="'+Y(t).toFixed(1)+'"></line>'+
+      '<text class="tick" x="'+(W-MR+7)+'" y="'+(Y(t)+4).toFixed(1)+'">'+fmt(t,0)+'</text>').join("")+
+    yrKeys.map(y=>'<text class="tick" x="'+X(yrs[y]).toFixed(1)+'" y="'+(H-6)+'">'+esc(y)+'</text>').join("")+
+    '<path d="M'+S.map((s,i)=>X(i).toFixed(1)+","+Y(s.inv).toFixed(1)).join(" L")+'" fill="none" stroke="var(--axis)" stroke-width="1.5" stroke-dasharray="4 3"></path>'+
+    ["A","B","C"].map(k=>'<path d="'+path(k)+'" fill="none" stroke="'+COL[k]+'" stroke-width="2" stroke-linejoin="round"></path>').join("")+
+    endLabels()+
+    '<line class="baseline" id="btcross" x1="0" y1="'+MT+'" x2="0" y2="'+(H-MB)+'" opacity="0"></line>'+
+    '<rect x="0" y="0" width="'+W+'" height="'+H+'" fill="transparent" id="bthit"></rect>'+
+  '</svg>';
+
+  const box=$("bt-chart"), tip=$("bt-tip"), svgEl=box.querySelector("svg"), cross=box.querySelector("#btcross");
+  box.querySelector("#bthit").addEventListener("mousemove", ev=>{
+    const r = svgEl.getBoundingClientRect();
+    let i = Math.round(((ev.clientX-r.left)/r.width*W - ML)/(W-ML-MR)*(S.length-1));
+    i = clamp(i,0,S.length-1); const s = S[i];
+    cross.setAttribute("x1",X(i)); cross.setAttribute("x2",X(i)); cross.setAttribute("opacity","1");
+    tip.style.opacity=1;
+    tip.innerHTML = esc(s.d)+' · 신호 <b>'+s.score.toFixed(0)+'</b><br>'+
+      '<span style="color:'+COL.A+'">정액 '+fmt(s.A,0)+'</span> · '+
+      '<span style="color:'+COL.B+'">가중 '+fmt(s.B,0)+'</span> · '+
+      '<span style="color:'+COL.C+'">임계 '+fmt(s.C,0)+'</span> 만원';
+    tip.style.left = clamp(X(i)/W*r.width - 90, 0, r.width-190)+"px";
+    tip.style.top  = (Y(Math.max(s.A,s.B,s.C))/H*r.height + 24)+"px";
+  });
+  box.addEventListener("mouseleave", ()=>{ tip.style.opacity=0; cross.setAttribute("opacity","0"); });
+}
+
+/* ============================================================
+   7. 부팅
+   ============================================================ */
+/* 개별 로더가 실패해도 나머지 화면은 반드시 그려지도록 격리 */
+const safe = (fn, fallback) => fn().catch(e => { console.warn(fn.name, e); fallback(); });
+
+/* 파이프라인 JSON이 있으면 그걸로 채우고 true 반환 */
+async function loadFromPipeline(){
+  if (!DATA_URL) return false;
+  const j = await J(DATA_URL);
+  if (!j || !j.usdkrw || !j.spx) return false;
+  ["usdkrw","vix","fng","spx","ndx","gold","us10y","us2y","krBase","kospi"].forEach(k=>{
+    if (j[k]) D[k] = j[k];
+  });
+  ["spxHigh","spxMa200","ndxHigh","ndxMa200","goldHigh","kospiHigh","kospiMa200"].forEach(k=>{ if (j[k]!=null) D[k]=j[k]; });
+  if (!D.kospi){ D.kospi=SNAP.kospi; D.kospiHigh=SNAP.kospiHigh; D.kospiMa200=SNAP.kospiMa200; }
+  D.fxSeries = j.fxSeries || null;
+  D.fedLow = j.fedLow ?? SNAP.fedLow; D.fedHigh = j.fedHigh ?? SNAP.fedHigh;
+  if (!D.us2y) D.us2y = SNAP.us2y;
+  if (!D.krBase) D.krBase = SNAP.krBase;
+  SECTORS.forEach(sec=>{
+    const v = j.sectors && j.sectors[sec.id];
+    if (v){ sec.dd = v.dd; sec.p200 = v.p200; sec.live = true; }
+    else { sec.dd = sec.snapDD; sec.p200 = sec.snap200; sec.live = false; }
+  });
+  ["fx","fxband","vix","fng","spx","ndx","us10y","gold","sector"].forEach(k=> mark(k, true));
+  mark("kospi", !!j.kospi);
+  PIPE = j.asOf || true;
+  return true;
+}
+let PIPE = false;
+
+async function boot(){
+  $("statusbar").innerHTML = '<span class="chip"><span class="dot wait"></span>데이터 불러오는 중…</span>';
+  if (await safe(loadFromPipeline, ()=>{})) {
+    const A = computeAxes();
+    renderStatus(); renderHero(A); renderAxes(A); renderKorea(A); renderFxChart(A);
+    renderSectors(A); renderTable(A);
+    window.__A = A; pfLoad(); dcaLoad(); renderPf(A); wirePf(A); renderDca(A); wireDca(A); wireBt(A);
+    return;
+  }
+  await Promise.all([
+    safe(loadFX,    ()=>{ D.usdkrw=SNAP.usdkrw; D.fxSeries=null; mark("fx",false); mark("fxband",false); }),
+    safe(loadIndex, ()=>{ D.spx=SNAP.spx; D.spxHigh=SNAP.spxHigh; D.spxMa200=SNAP.spxMa200;
+                          D.ndx=SNAP.ndx; D.ndxHigh=SNAP.ndxHigh; D.ndxMa200=SNAP.ndxMa200;
+                          mark("spx",false); mark("ndx",false); }),
+    safe(loadVix,   ()=>{ D.vix=SNAP.vix; mark("vix",false); }),
+    safe(loadKospi, ()=>{ D.kospi=SNAP.kospi; D.kospiHigh=SNAP.kospiHigh;
+                          D.kospiMa200=SNAP.kospiMa200; mark("kospi",false); }),
+    safe(loadFng,   ()=>{ D.fng=SNAP.fng; mark("fng",false); }),
+    safe(loadRates, ()=>{ D.us10y=SNAP.us10y; D.us2y=SNAP.us2y; D.krBase=SNAP.krBase; mark("us10y",false); }),
+    safe(loadGold,  ()=>{ D.gold=SNAP.gold; D.goldHigh=SNAP.goldHigh; mark("gold",false); }),
+    safe(loadSectors, ()=>{ SECTORS.forEach(s=>{ s.dd=s.snapDD; s.p200=s.snap200; s.live=false; });
+                            mark("sector", false); })
+  ]);
+  const A = computeAxes();
+  renderStatus(); renderHero(A); renderAxes(A); renderKorea(A); renderFxChart(A);
+  renderSectors(A); renderTable(A);
+  window.__A = A;
+
+  // 포트폴리오 (주소창 해시에서 복원) → 룩스루 → 백테스트
+  pfLoad(); dcaLoad(); renderPf(A); wirePf(A); renderDca(A); wireDca(A); wireBt(A);
+}
+/* 공유 시 개인정보(보유종목·금액·분할매수 설정)가 주소에 딸려가지 않도록 해시를 제거한 주소를 복사 */
+$("share").onclick = async ()=>{
+  const btn = $("share");
+  const clean = location.href.split("#")[0];
+  const hadData = /[#&][pd]=/.test(location.hash);
+  const done = ok => {
+    btn.textContent = ok ? (hadData ? "✓ 개인정보 뺀 주소 복사됨" : "✓ 복사됨") : "복사 실패";
+    setTimeout(()=>{ btn.textContent = "🔗 공유용 링크"; }, 2600);
+  };
+  if (location.protocol === "file:"){
+    alert("이 파일은 아직 내 컴퓨터에만 있습니다.\n\n다른 사람과 링크로 공유하려면 먼저 웹에 올려야 합니다.\n" +
+          "가장 간단한 방법은 app.netlify.com/drop 에 이 HTML 파일을 끌어다 놓는 것입니다.\n\n" +
+          "지금 바로 보내고 싶다면 이 HTML 파일 자체를 메일·메신저로 전달해도 그대로 동작합니다.");
+    return;
+  }
+  // 클립보드 API는 https에서만 동작 — 실패하면 주소를 직접 보여준다(복사됐다고 속이지 않음)
+  try {
+    if (!navigator.clipboard) throw new Error("no clipboard");
+    await navigator.clipboard.writeText(clean); done(true);
+  } catch(e){
+    prompt("아래 주소를 복사하세요 (개인정보 제외)", clean);
+    btn.textContent = "🔗 공유용 링크";
+  }
+};
+
+$("refresh").onclick = boot;
+$("theme").onclick = ()=>{
+  const cur = document.documentElement.getAttribute("data-theme");
+  const next = cur === "dark" ? "light" : cur === "light" ? "dark"
+             : (matchMedia("(prefers-color-scheme: dark)").matches ? "light" : "dark");
+  document.documentElement.setAttribute("data-theme", next);
+  if (window.__A){ renderFxChart(window.__A); renderBacktest(); }
+};
+boot();
+</script>
+</body>
+</html>
