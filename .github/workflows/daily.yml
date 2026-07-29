@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
         with:
           node-version: "24"
 
@@ -30,7 +30,7 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/market.json
+          git add data/market.json data/portfolio.json
           if git diff --staged --quiet; then
             echo "변경 없음 — 커밋 생략"
           else
