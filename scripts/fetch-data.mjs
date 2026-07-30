@@ -82,11 +82,11 @@ async function stooqDaily(sym) {
   return rows.length > 30 ? rows : null;
 }
 
-// 네이버 금융 (코스피 전용) — 국내 소스라 당일 종가가 가장 빠르다.
+// 네이버 금융 — 코스피 지수와 국내 상장 ETF(종목코드) 모두 같은 엔드포인트를 쓴다.
 // 단일따옴표 JS 배열 형식이라 JSON으로 바꿔 파싱한다.
-async function naverKospi() {
+async function naverSeries(symbol) {
   const s = daysAgo(500).replace(/-/g, ""), e = iso(new Date()).replace(/-/g, "");
-  const txt = await get(`https://api.finance.naver.com/siseJson.naver?symbol=KOSPI&requestType=1&startTime=${s}&endTime=${e}&timeframe=day`, 2, true);
+  const txt = await get(`https://api.finance.naver.com/siseJson.naver?symbol=${encodeURIComponent(symbol)}&requestType=1&startTime=${s}&endTime=${e}&timeframe=day`, 2, true);
   if (!txt || !txt.includes("[")) return null;
   let arr;
   try { arr = JSON.parse(txt.replace(/'/g, '"').replace(/,\s*\]/g, "]").trim()); } catch { return null; }
@@ -97,6 +97,7 @@ async function naverKospi() {
     .filter((x) => Number.isFinite(x.c) && x.c > 0);
   return rows.length > 30 ? rows : null;
 }
+const naverKospi = () => naverSeries("KOSPI");
 
 /**
  * 여러 소스를 시도해 **가장 최신 날짜**를 가진 결과를 채택한다.
@@ -130,10 +131,26 @@ const SERIES = {
   gold:  ["GC=F",  "xauusd"],    // 금 선물. 현물과 미세한 차이는 있으나 낙폭 판정엔 무방
 };
 
-/* 산업군 프록시 (미국 동종 섹터 ETF) */
+/* 산업군 프록시
+   1순위: 그 산업군에서 순자산이 가장 큰 **국내 상장 ETF** (네이버) — 실제로 사는 상품 그대로,
+          환율 효과까지 포함된 원화 기준 낙폭이 나온다.
+   2순위: 미국 동종 섹터 ETF (야후) — 국내 대표 상품이 너무 작거나 조회가 안 될 때.
+   국내 상품이 500억 미만이라 시세가 불안정한 산업군(에너지·유틸리티)은 처음부터 미국물을 쓴다. */
 const SECTOR_PROXY = {
-  semi: ["SOXX", "soxx.us"], fin: ["XLF", "xlf.us"], reit: ["XLRE", "xlre.us"],
-  bio: ["XLV", "xlv.us"], staple: ["XLP", "xlp.us"], energy: ["XLE", "xle.us"], util: ["XLU", "xlu.us"],
+  semi:    { kr: "396500", us: "SOXX" },   // TIGER 반도체TOP10
+  ai:      { kr: "456600" },               // TIME 글로벌AI인공지능액티브
+  power:   { kr: "487240" },               // KODEX AI전력핵심설비
+  defense: { kr: "449450" },               // PLUS K방산
+  ship:    { kr: "466920" },               // SOL 조선TOP3플러스
+  batt:    { kr: "305720" },               // KODEX 2차전지산업
+  fin:     { kr: "102970", us: "XLF"  },   // KODEX 증권
+  reit:    { kr: "329200", us: "XLRE" },   // TIGER 리츠부동산인프라
+  bio:     { kr: "462900", us: "XLV"  },   // KoAct 바이오헬스케어액티브
+  staple:  { kr: "429000", us: "XLP"  },   // TIGER 미국S&P500배당귀족
+  auto:    { kr: "138540" },               // TIGER 현대차그룹플러스
+  soft:    { kr: "381170" },               // TIGER 미국테크TOP10
+  energy:  { us: "XLE" },                  // 국내 상품 전부 500억 미만
+  util:    { us: "XLU" },                  // 국내 상품 134억
 };
 
 async function main() {
@@ -193,17 +210,18 @@ async function main() {
   /* 산업군 낙폭 */
   console.log("산업군 프록시…");
   out.sectors = {};
-  for (const [id, [ySym, sSym]] of Object.entries(SECTOR_PROXY)) {
-    const r = await bestOf(id, [
-      ["yahoo", () => yahooDaily(ySym)],
-      ["stooq", () => stooqDaily(sSym)],
-    ]);
+  for (const [id, spec] of Object.entries(SECTOR_PROXY)) {
+    const srcs = [];
+    if (spec.kr) srcs.push(["naver:" + spec.kr, () => naverSeries(spec.kr)]);
+    if (spec.us) srcs.push(["yahoo:" + spec.us, () => yahooDaily(spec.us)]);
+    const r = await bestOf(id, srcs);
     if (!r) { fail.push("sector:" + id); continue; }
     const s = summarize(r.rows);
     out.sectors[id] = {
       dd: +(((s.high - s.v) / s.high) * 100).toFixed(2),
       p200: +((s.v / s.ma200 - 1) * 100).toFixed(2),
       d: s.d,
+      src: r.source,
     };
   }
 
