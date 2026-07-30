@@ -1,14 +1,8 @@
 /**
- * 연금계좌 ETF 대시보드 — 일일 데이터 수집 스크립트 (v2)
+ * 연금계좌 ETF 대시보드 — 일일 데이터 수집 스크립트
  *
- * GitHub Actions에서 매일 실행되어 두 파일을 만듭니다.
- *   data/market.json    — 시장 지표 (환율·지수·VIX·금·금리·공포탐욕·산업군)
- *   data/portfolio.json — data/tickers.json 에 등록된 보유종목 시세
- *
- * v2 변경점
- *   - 시세 소스를 Yahoo Finance(1차) + Stooq(2차 폴백)로 변경
- *     (Stooq가 GitHub 러너에서 자주 차단되어 실패 13건 발생했던 문제 해결)
- *   - 보유종목 시세 수집 추가 (data/tickers.json → data/portfolio.json)
+ * GitHub Actions에서 매일 실행되어 data/market.json 을 만듭니다.
+ * 브라우저가 아니라 GitHub 서버에서 돌기 때문에 CORS도, 프록시도 필요 없습니다.
  *
  * 의존성 없음 (Node 20+ 내장 fetch만 사용)
  * 로컬 실행: node scripts/fetch-data.mjs
@@ -16,97 +10,33 @@
 
 import { writeFile, mkdir, readFile } from "node:fs/promises";
 
-const OUT_MARKET = "data/market.json";
-const OUT_PORTFOLIO = "data/portfolio.json";
-const TICKERS = "data/tickers.json";
+const OUT = "data/market.json";
 const TIMEOUT = 20000;
 
 /* ---------- 공통 ---------- */
 const iso = (d) => d.toISOString().slice(0, 10);
 const daysAgo = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return iso(d); };
 const avg = (a) => a.reduce((x, y) => x + y, 0) / a.length;
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function get(url, tries = 3) {
   for (let i = 0; i < tries; i++) {
     try {
       const c = new AbortController();
       const t = setTimeout(() => c.abort(), TIMEOUT);
-      const r = await fetch(url, {
-        signal: c.signal,
-        headers: { "User-Agent": "Mozilla/5.0 (compatible; etf-season-bot/2.0)" },
-      });
+      const r = await fetch(url, { signal: c.signal, headers: { "User-Agent": "etf-season-bot/1.0" } });
       clearTimeout(t);
       if (!r.ok) throw new Error("HTTP " + r.status);
       return await r.text();
     } catch (e) {
-      console.warn(`  재시도 ${i + 1}/${tries} — ${url.slice(0, 70)} — ${e.message}`);
-      await sleep(1500 * (i + 1));
+      console.warn(`  재시도 ${i + 1}/${tries} — ${url.slice(0, 60)} — ${e.message}`);
+      await new Promise((r) => setTimeout(r, 1500 * (i + 1)));
     }
   }
   return null;
 }
 const getJson = async (u) => { const t = await get(u); try { return t ? JSON.parse(t) : null; } catch { return null; } };
 
-/* ---------- Yahoo Finance (1차 소스) ---------- */
-/** 일봉 시계열: [{d, o, h, l, c, v}, ...] (o/h/l/v는 없으면 c로 대체/0) */
-async function yahooDaily(sym, range = "2y") {
-  const j = await getJson(
-    `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=${range}&interval=1d`
-  );
-  const res = j?.chart?.result?.[0];
-  const q = res?.indicators?.quote?.[0];
-  if (!res?.timestamp || !q?.close) return null;
-  const rows = res.timestamp
-    .map((ts, i) => ({
-      d: iso(new Date(ts * 1000)),
-      o: isFinite(q.open?.[i]) && q.open[i] !== null ? q.open[i] : q.close[i],
-      h: isFinite(q.high?.[i]) && q.high[i] !== null ? q.high[i] : q.close[i],
-      l: isFinite(q.low?.[i]) && q.low[i] !== null ? q.low[i] : q.close[i],
-      c: q.close[i],
-      v: isFinite(q.volume?.[i]) && q.volume[i] !== null ? q.volume[i] : 0,
-    }))
-    .filter((x) => x.d && isFinite(x.c) && x.c !== null);
-  if (!rows.length) return null;
-  rows.meta = res.meta || {};
-  return rows;
-}
-
-/* ---------- 기술지표 ---------- */
-/** RSI(14) — Wilder 방식 */
-function rsi14(closes, period = 14) {
-  if (closes.length < period + 1) return null;
-  let gain = 0, loss = 0;
-  for (let i = 1; i <= period; i++) {
-    const d = closes[i] - closes[i - 1];
-    if (d > 0) gain += d; else loss -= d;
-  }
-  let avgG = gain / period, avgL = loss / period;
-  for (let i = period + 1; i < closes.length; i++) {
-    const d = closes[i] - closes[i - 1];
-    avgG = (avgG * (period - 1) + Math.max(d, 0)) / period;
-    avgL = (avgL * (period - 1) + Math.max(-d, 0)) / period;
-  }
-  if (avgL === 0) return 100;
-  return +(100 - 100 / (1 + avgG / avgL)).toFixed(1);
-}
-
-/** 볼린저밴드(20, 2σ) */
-function bollinger(closes, period = 20, k = 2) {
-  if (closes.length < period) return null;
-  const win = closes.slice(-period);
-  const mid = avg(win);
-  const sd = Math.sqrt(avg(win.map((x) => (x - mid) ** 2)));
-  const upper = mid + k * sd, lower = mid - k * sd;
-  const c = closes[closes.length - 1];
-  return {
-    mid: +mid.toFixed(4), upper: +upper.toFixed(4), lower: +lower.toFixed(4),
-    pctB: upper === lower ? null : +(((c - lower) / (upper - lower)) * 100).toFixed(1), // 0=하단, 100=상단
-    bandWidth: +(((upper - lower) / mid) * 100).toFixed(2), // 밴드폭 % (낮으면 스퀴즈)
-  };
-}
-
-/* ---------- Stooq (2차 폴백) ---------- */
+/* ---------- Stooq ---------- */
 async function stooqDaily(sym, fromDays) {
   const d1 = daysAgo(fromDays).replace(/-/g, "");
   const d2 = iso(new Date()).replace(/-/g, "");
@@ -117,16 +47,14 @@ async function stooqDaily(sym, fromDays) {
     .filter((x) => x.d && isFinite(x.c));
   return rows.length > 30 ? rows : null;
 }
-
-/** Yahoo 우선, 실패하면 Stooq */
-async function daily(yahooSym, stooqSym, fromDays = 500) {
-  const y = await yahooDaily(yahooSym, fromDays > 400 ? "2y" : "1y");
-  if (y) return y;
-  if (stooqSym) {
-    console.warn(`  Yahoo 실패 → Stooq 폴백 (${stooqSym})`);
-    return await stooqDaily(stooqSym, fromDays);
-  }
-  return null;
+async function stooqQuote(sym) {
+  const t = await get(`https://stooq.com/q/l/?s=${encodeURIComponent(sym)}&f=sd2t2ohlc&h&e=csv`);
+  if (!t) return null;
+  const r = t.trim().split(/\r?\n/);
+  if (r.length < 2) return null;
+  const c = r[1].split(",");
+  const v = parseFloat(c[6]);
+  return isFinite(v) && v !== 0 ? { v, d: c[1] } : null;
 }
 
 /* 시계열 → 현재값 · 52주 고점 · 200일 이동평균 */
@@ -135,19 +63,68 @@ function summarize(rows) {
   return {
     v: last.c, d: last.d,
     high: Math.max(...rows.slice(-260).map((x) => x.c)),
-    ma200: avg(rows.slice(-Math.min(200, rows.length)).map((x) => x.c)),
+    ma200: avg(rows.slice(-200).map((x) => x.c)),
   };
+}
+
+/* ---------- 코스피 전용: 소스 3곳을 시도해 가장 최신 것을 쓴다 ----------
+   Stooq는 아시아 지수 종가 반영이 늦는 경우가 있어 국내 소스를 우선 시도한다. */
+
+// ① 네이버 금융 (국내 소스 — 보통 가장 빠름). 단일따옴표 JS 배열이라 JSON으로 바꿔 파싱
+async function kospiNaver() {
+  const s = daysAgo(500).replace(/-/g, ""), e = iso(new Date()).replace(/-/g, "");
+  const txt = await get(`https://api.finance.naver.com/siseJson.naver?symbol=KOSPI&requestType=1&startTime=${s}&endTime=${e}&timeframe=day`, 2);
+  if (!txt || !txt.includes("[")) return null;
+  let arr;
+  try { arr = JSON.parse(txt.replace(/'/g, '"').replace(/,\s*\]/g, "]").trim()); }
+  catch { return null; }
+  if (!Array.isArray(arr) || arr.length < 30) return null;
+  const rows = arr.slice(1)
+    .filter((r) => Array.isArray(r) && /^\d{8}$/.test(String(r[0])))
+    .map((r) => ({ d: `${String(r[0]).slice(0,4)}-${String(r[0]).slice(4,6)}-${String(r[0]).slice(6,8)}`, c: +r[4] }))
+    .filter((x) => isFinite(x.c) && x.c > 0);
+  return rows.length > 30 ? rows : null;
+}
+
+// ② 야후 파이낸스 (^KS11)
+async function kospiYahoo() {
+  const txt = await get("https://query1.finance.yahoo.com/v8/finance/chart/%5EKS11?range=2y&interval=1d", 2);
+  if (!txt) return null;
+  let j; try { j = JSON.parse(txt); } catch { return null; }
+  const r = j?.chart?.result?.[0];
+  const ts = r?.timestamp, cl = r?.indicators?.quote?.[0]?.close;
+  if (!Array.isArray(ts) || !Array.isArray(cl)) return null;
+  const rows = ts.map((t, i) => ({ d: new Date(t * 1000).toISOString().slice(0, 10), c: cl[i] }))
+                 .filter((x) => isFinite(x.c) && x.c > 0);
+  return rows.length > 30 ? rows : null;
+}
+
+// ③ Stooq (최후 수단)
+const kospiStooq = () => stooqDaily("^kospi", 500);
+
+async function fetchKospi() {
+  const tried = [];
+  for (const [name, fn] of [["naver", kospiNaver], ["yahoo", kospiYahoo], ["stooq", kospiStooq]]) {
+    try {
+      const rows = await fn();
+      if (rows) { tried.push({ name, rows, last: rows[rows.length - 1].d }); console.log(`  코스피 ${name}: 최신 ${rows[rows.length-1].d} (${rows.length}일)`); }
+      else console.log(`  코스피 ${name}: 실패`);
+    } catch (e) { console.log(`  코스피 ${name}: 오류 ${e.message}`); }
+  }
+  if (!tried.length) return null;
+  // 가장 최신 날짜를 가진 소스 채택
+  tried.sort((a, b) => (a.last < b.last ? 1 : a.last > b.last ? -1 : 0));
+  console.log(`  → 채택: ${tried[0].name} (${tried[0].last})`);
+  return { rows: tried[0].rows, source: tried[0].name };
 }
 
 /* ---------- 산업군 프록시 (미국 동종 섹터 ETF) ---------- */
 const SECTOR_PROXY = {
-  semi:   ["SOXX", "soxx.us"], fin:  ["XLF", "xlf.us"], reit: ["XLRE", "xlre.us"],
-  bio:    ["XLV", "xlv.us"],   staple: ["XLP", "xlp.us"], energy: ["XLE", "xle.us"],
-  util:   ["XLU", "xlu.us"],
+  semi: "soxx.us", fin: "xlf.us", reit: "xlre.us",
+  bio: "xlv.us", staple: "xlp.us", energy: "xle.us", util: "xlu.us",
 };
 
-/* ================= 1. 시장 지표 → market.json ================= */
-async function buildMarket() {
+async function main() {
   const out = { asOf: iso(new Date()), generatedAt: new Date().toISOString(), sources: {} };
   const fail = [];
 
@@ -164,35 +141,38 @@ async function buildMarket() {
     console.log(`  환율 시계열 ${out.fxSeries.length}일`);
   } else fail.push("fxSeries");
 
-  /* 지수 — Yahoo 우선, Stooq 폴백 */
-  for (const [key, ySym, sSym] of [["spx", "^GSPC", "^spx"], ["ndx", "^NDX", "^ndx"], ["kospi", "^KS11", "^kospi"]]) {
+  /* 코스피 — 소스 3곳 중 가장 최신 */
+  console.log("코스피…");
+  const kos = await fetchKospi();
+  if (kos) {
+    const s = summarize(kos.rows);
+    out.kospi = { v: s.v, d: s.d };
+    out.kospiHigh = s.high;
+    out.kospiMa200 = s.ma200;
+    out.sources.kospi = kos.source;
+  } else fail.push("kospi");
+
+  /* 지수 */
+  for (const [key, sym] of [["spx", "^spx"], ["ndx", "^ndx"]]) {
     console.log(`${key}…`);
-    const h = await daily(ySym, sSym, 500);
+    const h = await stooqDaily(sym, 500);
     if (h) {
       const s = summarize(h);
       out[key] = { v: s.v, d: s.d };
       out[key + "High"] = s.high;
       out[key + "Ma200"] = s.ma200;
     } else fail.push(key);
-    await sleep(300);
   }
 
   /* VIX · 금 · 미국 10년물 */
-  for (const [key, ySym, sSym, lo, hi] of [
-    ["vix", "^VIX", "^vix", 5, 100],
-    ["gold", "GC=F", "xauusd", 500, 20000],
-    ["us10y", "^TNX", "10usy.b", 0.5, 15],
-  ]) {
+  for (const [key, sym, lo, hi] of [["vix", "^vix", 5, 100], ["gold", "xauusd", 500, 20000], ["us10y", "10usy.b", 0.5, 15]]) {
     console.log(`${key}…`);
-    const h = await daily(ySym, sSym, 500);
-    if (h) {
-      const s = summarize(h);
-      if (s.v > lo && s.v < hi) {
-        out[key] = { v: s.v, d: s.d };
-        if (key === "gold") out.goldHigh = s.high;
-      } else fail.push(key);
-    } else fail.push(key);
-    await sleep(300);
+    const q = await stooqQuote(sym);
+    if (q && q.v > lo && q.v < hi) out[key] = q; else fail.push(key);
+  }
+  if (out.gold) {
+    const gh = await stooqDaily("xauusd", 500);
+    if (gh) out.goldHigh = summarize(gh).high;
   }
 
   /* CNN 공포탐욕지수 */
@@ -206,8 +186,8 @@ async function buildMarket() {
   /* 산업군 낙폭 */
   console.log("산업군 프록시…");
   out.sectors = {};
-  for (const [id, [ySym, sSym]] of Object.entries(SECTOR_PROXY)) {
-    const h = await daily(ySym, sSym, 430);
+  for (const [id, sym] of Object.entries(SECTOR_PROXY)) {
+    const h = await stooqDaily(sym, 430);
     if (!h) { fail.push("sector:" + id); continue; }
     const s = summarize(h);
     out.sectors[id] = {
@@ -215,7 +195,6 @@ async function buildMarket() {
       p200: +((s.v / s.ma200 - 1) * 100).toFixed(2),
       d: s.d,
     };
-    await sleep(300);
   }
 
   /* 수동 관리 값 — manual.json 이 있으면 덮어씀 (기준금리, 선행 P/E 등) */
@@ -226,92 +205,18 @@ async function buildMarket() {
   } catch { /* 없으면 무시 */ }
 
   out.failed = fail;
-  if (fail.length) console.warn("⚠ market 실패 항목:", fail.join(", "));
-  return out;
-}
-
-/* ================= 2. 보유종목 시세 → portfolio.json ================= */
-async function buildPortfolio() {
-  let list;
-  try {
-    list = JSON.parse(await readFile(TICKERS, "utf8")).items;
-  } catch {
-    console.warn("data/tickers.json 없음 — 보유종목 수집 생략");
-    return null;
-  }
-
-  const out = { asOf: iso(new Date()), generatedAt: new Date().toISOString(), items: [], failed: [] };
-
-  for (const t of list) {
-    console.log(`보유종목 ${t.name} (${t.yahoo})…`);
-    const h = await yahooDaily(t.yahoo, "1y");
-    if (!h || h.length < 2) { out.failed.push(t.name); await sleep(300); continue; }
-
-    const closes = h.map((x) => x.c);
-    const last = h[h.length - 1];
-    const prev = h[h.length - 2];
-    const high52 = Math.max(...closes);
-    const low52 = Math.min(...closes);
-    const ma200 = avg(closes.slice(-Math.min(200, closes.length)));
-    const ma20 = avg(closes.slice(-Math.min(20, closes.length)));
-    const ma60 = avg(closes.slice(-Math.min(60, closes.length)));
-
-    /* 차트 진단용 시계열 — 최근 260영업일(약 1년) OHLCV */
-    const series = h.slice(-260).map((x) => ({
-      d: x.d,
-      o: +x.o.toFixed(4), h: +x.h.toFixed(4), l: +x.l.toFixed(4), c: +x.c.toFixed(4),
-      v: Math.round(x.v),
-    }));
-
-    out.items.push({
-      name: t.name,
-      code: t.code,
-      yahoo: t.yahoo,
-      currency: t.currency || h.meta?.currency || "KRW",
-      yahooName: h.meta?.shortName || h.meta?.longName || null, // 코드-종목명 일치 검증용
-      close: last.c, date: last.d,
-      prevClose: prev.c,
-      chgPct: +(((last.c - prev.c) / prev.c) * 100).toFixed(2),
-      high52: +high52.toFixed(4), low52: +low52.toFixed(4),
-      offHigh52: +(((high52 - last.c) / high52) * 100).toFixed(2), // 52주 고점 대비 낙폭 %
-      ma20: +ma20.toFixed(4), ma60: +ma60.toFixed(4), ma200: +ma200.toFixed(4),
-      vsMa200: +((last.c / ma200 - 1) * 100).toFixed(2),           // 200일선 대비 %
-      week1: h.length > 6 ? +(((last.c - h[h.length - 6].c) / h[h.length - 6].c) * 100).toFixed(2) : null,
-      rsi14: rsi14(closes),                                        // 14일 RSI (Wilder)
-      bb20: bollinger(closes),                                     // 볼린저밴드(20, 2σ)
-      series,                                                      // 차트 진단용 일봉 시계열
-    });
-    await sleep(300); // Yahoo 요청 간격
-  }
-
-  if (out.failed.length) console.warn("⚠ portfolio 실패 항목:", out.failed.join(", "));
-  return out;
-}
-
-/* ================= 메인 ================= */
-async function main() {
-  const market = await buildMarket();
-  const portfolio = await buildPortfolio();
+  if (fail.length) console.warn("⚠ 실패한 항목:", fail.join(", "));
 
   /* 필수 항목이 다 빠졌으면 기존 파일을 덮어쓰지 않는다 */
-  if (!market.usdkrw && !market.spx) {
-    console.error("✗ 핵심 시장 데이터를 전부 받지 못했습니다. 기존 파일을 유지합니다.");
+  if (!out.usdkrw && !out.spx) {
+    console.error("✗ 핵심 데이터를 전부 받지 못했습니다. 기존 파일을 유지합니다.");
     process.exit(1);
   }
 
   await mkdir("data", { recursive: true });
-  await writeFile(OUT_MARKET, JSON.stringify(market));
-  console.log(`✓ ${OUT_MARKET} 저장 (실패 ${market.failed.length}건)`);
-
-  if (portfolio) {
-    /* 절반 이상 실패하면 기존 portfolio.json 유지 */
-    if (portfolio.items.length >= Math.ceil((portfolio.items.length + portfolio.failed.length) / 2)) {
-      await writeFile(OUT_PORTFOLIO, JSON.stringify(portfolio));
-      console.log(`✓ ${OUT_PORTFOLIO} 저장 (${portfolio.items.length}종목, 실패 ${portfolio.failed.length}건)`);
-    } else {
-      console.error("✗ 보유종목 절반 이상 수집 실패 — 기존 portfolio.json 유지");
-    }
-  }
+  await writeFile(OUT, JSON.stringify(out));
+  const kb = (JSON.stringify(out).length / 1024).toFixed(0);
+  console.log(`✓ ${OUT} 저장 완료 (${kb}KB, 실패 ${fail.length}건)`);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });
