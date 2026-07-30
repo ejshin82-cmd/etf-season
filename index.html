@@ -244,7 +244,8 @@
     <h1>연금계좌 ETF 투자계절 대시보드</h1>
     <p class="sub">연금저축·IRP에서 실제 매수 가능한 <b>국내상장 ETF만</b> (한국거래소 상장 · 국내 운용사 상품) · 시장 4축 판정 + 15개 산업군 지도</p>
   </div>
-  <div style="display:flex; gap:8px">
+  <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center">
+    <span id="extra-links"></span>
     <button class="btn" id="refresh">↻ 새로고침</button>
     <button class="btn" id="share" title="포트폴리오·분할매수 설정을 뺀 깨끗한 주소를 복사합니다">🔗 공유용 링크</button>
     <button class="btn" id="theme">◐ 테마</button>
@@ -498,6 +499,13 @@ const SNAP = {
    비워두면 기존처럼 브라우저가 직접 호출합니다.
    ============================================================ */
 const DATA_URL = "https://etf-season.pages.dev/data/market.json";   // 예: "https://내아이디.github.io/etf-season/market.json"
+
+/* 「종목 차트 진단」처럼 같은 저장소에 있는 다른 페이지로 가는 버튼.
+   파일명을 넣으면 헤더에 버튼이 생기고, 비워두면 버튼이 안 나옵니다.
+   여러 개도 됩니다: [["📊 종목 차트 진단","chart.html"], ["📈 다른 페이지","other.html"]] */
+const EXTRA_PAGES = [
+  ["📊 종목 차트 진단", "chart.html"],
+];
 
 /* ============================================================
    2. 네트워크 — 직접 → CORS 프록시 순으로 시도
@@ -1976,6 +1984,13 @@ async function boot(){
   pfLoad(); dcaLoad(); renderPf(A); wirePf(A); renderDca(A); wireDca(A); wireBt(A);
 }
 /* 공유 시 개인정보(보유종목·금액·분할매수 설정)가 주소에 딸려가지 않도록 해시를 제거한 주소를 복사 */
+// 같은 저장소의 다른 페이지로 가는 버튼 (EXTRA_PAGES 설정에 따라)
+$("extra-links").innerHTML = (EXTRA_PAGES || [])
+  .filter(x => Array.isArray(x) && x[1])
+  .map(([label, href]) =>
+    '<a class="btn" href="' + esc(href) + '" style="display:inline-block;text-decoration:none">' +
+    esc(label) + '</a>').join("");
+
 $("share").onclick = async ()=>{
   const btn = $("share");
   const clean = location.href.split("#")[0];
