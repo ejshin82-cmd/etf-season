@@ -212,6 +212,22 @@
   .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:12.5px; color:var(--ink-2); margin-bottom:10px}
   .legend i{display:inline-block; width:14px; height:3px; border-radius:2px; margin-right:6px; vertical-align:3px}
 
+  /* 모바일: 가로로 밀어야 보이는 표 대신 부차적인 열을 감춘다 */
+  @media(max-width:640px){
+    .tblwrap{margin:0 -6px; padding:0 6px}
+    table.etf-table, table.bt-table{min-width:0 !important}
+    table.etf-table th:nth-child(4), table.etf-table td:nth-child(4),
+    table.etf-table th:nth-child(6), table.etf-table td:nth-child(6){display:none}
+    table.bt-table th:nth-child(3), table.bt-table td:nth-child(3),
+    table.bt-table th:nth-child(7), table.bt-table td:nth-child(7){display:none}
+    th,td{padding:8px 6px}
+    .note{max-width:none}
+    header{gap:10px}
+    h1{font-size:19px}
+    .score-big{font-size:36px}
+    .season-name{font-size:26px}
+  }
+
   ul.notes{margin:8px 0 0; padding-left:18px; font-size:13px; color:var(--ink-2)}
   ul.notes li{margin-bottom:6px}
   .disclaimer{font-size:12px; color:var(--ink-3); margin-top:22px; line-height:1.6;
@@ -307,7 +323,7 @@
   <p class="hint">연금 포트폴리오의 뼈대가 되는 종목들. 산업군·테마 ETF는 아래 「산업군 지도」에서 따로 봅니다.</p>
   <div class="filters" id="filters"></div>
   <div class="tblwrap">
-    <table>
+    <table class="etf-table">
       <thead><tr>
         <th>종목명</th>
         <th class="num sortable" data-k="aum">순자산</th>
@@ -382,7 +398,7 @@
       <div id="bt-chart"></div><div class="tip" id="bt-tip"></div>
     </div>
     <div class="tblwrap">
-      <table style="min-width:640px">
+      <table class="bt-table" style="min-width:640px">
         <thead><tr><th>전략</th><th class="num">최종 평가액</th><th class="num">총 투입</th>
           <th class="num">수익률</th><th class="num">연환산</th><th class="num">최대낙폭</th><th>설명</th></tr></thead>
         <tbody id="bt-body"></tbody>
@@ -1161,6 +1177,7 @@ function renderKorea(A){
 /* --- 환율 라인차트 --- */
 function renderFxChart(A){
   const box = $("fxchart"), tip = $("fxtip");
+  box.style.minHeight = "";
   if (!D.fxSeries){
     $("fx-src").textContent = "· 자동 호출 실패 — 밴드는 연도별 실측 고/저 기준 추정";
     box.innerHTML = '<p class="sub" style="padding:26px 0">환율 시계열을 불러오지 못했습니다. '+
@@ -1169,7 +1186,12 @@ function renderFxChart(A){
   }
   $("fx-src").textContent = "· 실시간 (Frankfurter/ECB, "+D.fxSeries.length+"영업일)";  // textContent라 안전
 
-  const S = D.fxSeries, W = 1000, H = 260, ML=8, MR=52, MT=14, MB=26;
+  // SVG는 viewBox 전체가 화면 폭에 맞춰 축소된다. 좌표 폭을 실제 표시 폭에 맞춰야
+  // 글자가 작아지지 않는다. 좁은 화면에서는 세로를 늘려 납작해지는 것도 막는다.
+  const S = D.fxSeries;
+  const cw = Math.max(320, Math.min(1000, box.clientWidth || 1000));
+  const narrow = cw < 560;
+  const W = cw, H = narrow ? 300 : 260, ML = 8, MR = narrow ? 46 : 52, MT = 14, MB = 26;
   const cs = S.map(x=>x.c);
   const lo = Math.min.apply(null, cs), hi = Math.max.apply(null, cs);
   // 변동폭이 0이면(값이 모두 같으면) 0으로 나누게 되므로 최소 여백을 준다
@@ -1196,7 +1218,8 @@ function renderFxChart(A){
     ticks.map(t=>'<line class="gridline" x1="'+ML+'" y1="'+Y(t).toFixed(1)+'" x2="'+(W-MR)+'" y2="'+Y(t).toFixed(1)+'"></line>'+
                  (Math.abs(Y(t)-Y(cur)) < 16 ? "" :
                  '<text class="tick" x="'+(W-MR+7)+'" y="'+(Y(t)+4).toFixed(1)+'">'+fmt(t,0)+'</text>')).join("")+
-    Object.keys(yrs).map(y=>'<text class="tick" x="'+X(yrs[y]).toFixed(1)+'" y="'+(H-6)+'">'+esc(y)+'</text>').join("")+
+    Object.keys(yrs).filter((y,i,a)=> !narrow || i % Math.ceil(a.length/3) === 0)
+      .map(y=>'<text class="tick" x="'+X(yrs[y]).toFixed(1)+'" y="'+(H-6)+'">'+esc(y)+'</text>').join("")+
     '<path d="'+path+'" fill="none" stroke="var(--s1)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></path>'+
     '<circle cx="'+X(S.length-1).toFixed(1)+'" cy="'+Y(cur).toFixed(1)+'" r="4.5" fill="var(--s1)" stroke="var(--surface-1)" stroke-width="2"></circle>'+
     '<text x="'+(W-MR+7)+'" y="'+(Y(cur)+4).toFixed(1)+'" style="fill:var(--s1);font-size:12px;font-weight:700">'+fmt(cur,0)+'</text>'+
@@ -1835,7 +1858,9 @@ function renderBacktest(){
     esc(BT.from)+' ~ '+esc(BT.to)+' · 매달 100만원 · 대상 S&P500(원화 환산, 환노출)</span>';
 
   // --- 차트 ---
-  const W=1000, H=300, ML=8, MR=64, MT=14, MB=26;
+  const bw = Math.max(320, Math.min(1000, ($("bt-chart").clientWidth) || 1000));
+  const btNarrow = bw < 560;
+  const W = bw, H = btNarrow ? 340 : 300, ML = 8, MR = btNarrow ? 52 : 64, MT = 14, MB = 26;
   const all = S.flatMap(s=>[s.A,s.B,s.C]);
   const y1 = Math.max(Math.max.apply(null, all) * 1.04, 1), y0 = 0;
   const X = i => ML + i/(S.length-1)*(W-ML-MR);
@@ -1854,7 +1879,7 @@ function renderBacktest(){
   const tickStep = Math.ceil(y1/4/step)*step;
   const ticks = []; for(let t=tickStep; t<y1; t+=tickStep) ticks.push(t);
   const yrs = {}; S.forEach((s,i)=>{ const y=esc(s.d).slice(0,4); if(!(y in yrs)) yrs[y]=i; });
-  const yrKeys = Object.keys(yrs).filter((y,i)=> i % Math.ceil(Object.keys(yrs).length/8) === 0);
+  const yrKeys = Object.keys(yrs).filter((y,i)=> i % Math.ceil(Object.keys(yrs).length/(btNarrow?4:8)) === 0);
 
   $("bt-chart").innerHTML =
   '<div class="legend">'+ BT.stats.map(s=>'<span><i style="background:'+COL[s.k]+'"></i>'+s.name+'</span>').join("")+
@@ -1974,6 +1999,13 @@ $("share").onclick = async ()=>{
     btn.textContent = "🔗 공유용 링크";
   }
 };
+
+// 화면 회전이나 창 크기 변경 시 차트를 다시 그린다(viewBox가 폭에 의존하므로)
+let _rz;
+addEventListener("resize", ()=>{
+  clearTimeout(_rz);
+  _rz = setTimeout(()=>{ if (window.__A){ renderFxChart(window.__A); renderBacktest(); } }, 200);
+});
 
 $("refresh").onclick = boot;
 $("theme").onclick = ()=>{
