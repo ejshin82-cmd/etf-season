@@ -293,9 +293,7 @@
     금리민감 섹터는 <b>금리 방향</b>을 보고 담습니다. 아래 신호는 그 성격 + 현재 낙폭 + 매크로 국면을 합쳐 계산합니다.
     낙폭·200일선은 가능한 경우 <b>미국 동종 섹터 ETF를 대용 지표로 실시간 계산</b>합니다.
   </p>
-  <div class="alert warn" style="margin-bottom:14px">⚠ <b>한국 산업군의 낙폭·모멘텀 수치는 7/28~29 폭락 이전 스냅샷입니다.</b>
-    코스피가 이틀 만에 6/22 고점 대비 -38% 수준까지 밀렸으므로, <b>국내 섹터의 실제 낙폭은 표시된 값보다 훨씬 큽니다.</b>
-    ● 표시가 붙은 항목(미국 동종 섹터 대용)만 실시간입니다.</div>
+  <div id="sec-banner"></div>
   <div class="filters" id="secfilters"></div>
   <div class="secgrid" id="secgrid"></div>
   <p class="note" style="max-width:none; margin-top:14px">
@@ -1294,6 +1292,22 @@ function renderSectors(A){
     b.onclick = ()=>{ secFilter = b.dataset.g; renderSectors(A); };
   });
 
+  // 살 만한 상품(순자산 1000억 이상)이 있는 산업군만 신선도를 따진다.
+  // 어차피 「살 상품이 없음」인 산업군은 낙폭이 낡아도 판단에 영향이 없다.
+  const buyableSec = SECTORS.filter(x => (x.etfs||[]).some(e => e.aum >= 1000));
+  const liveN = buyableSec.filter(s=>s.live).length;
+  const stale = buyableSec.filter(s=>!s.live).map(s=>s.name);
+  $("sec-banner").innerHTML = stale.length === 0
+    ? '<div class="alert ok" style="margin-bottom:14px">✓ <b>매수 가능한 산업군 '+buyableSec.length+'개가 전부 실시간입니다.</b> '+
+      '낙폭·200일선은 각 산업군에서 순자산이 가장 큰 <b>국내 상장 ETF</b>의 실제 시세로 계산합니다 '+
+      '(국내 대표 상품이 너무 작은 에너지·유틸리티만 미국 동종 섹터 ETF 대용). '+
+      '원화 기준이라 환율 효과까지 반영된 값입니다.</div>'
+    : '<div class="alert warn" style="margin-bottom:14px">⚠ <b>'+esc(stale.join(", "))+'</b> '+
+      '('+stale.length+'개) '+
+      '는 실시간 조회에 실패해 <b>2026년 7월 수동 조사 스냅샷</b>을 쓰고 있습니다. '+
+      '그사이 시장이 크게 움직였다면 실제 낙폭은 표시된 값과 다릅니다. '+
+      '나머지 '+liveN+'개는 실시간입니다.</div>';
+
   const list = SECTORS
     .filter(s => secFilter==="전체" || s.group===secFilter)
     .map(s => ({ s, v: sectorScore(s, A) }))
@@ -1312,11 +1326,15 @@ function renderSectors(A){
         '<span class="sig" style="color:'+sig.c+'"><span class="dot" style="background:'+sig.dot+'"></span>'+sig.t+'</span>'+
       '</div>'+
       '<div class="sec-metrics">'+
-        '<div>고점 대비'+(s.live?' <span style="color:var(--good-ink)">●</span>':'')+'<b>-'+s.dd.toFixed(1)+'%</b></div>'+
+        '<div>고점 대비'+(s.live?' <span style="color:var(--good-ink)" title="실시간">●</span>':'')+
+          '<b>-'+s.dd.toFixed(1)+'%</b></div>'+
         '<div>200일선<b>'+(s.p200>=0?"+":"")+s.p200.toFixed(1)+'%</b></div>'+
         '<div>규모 1위<b>'+(top ? aumTxt(top.aum) : "–")+'</b></div>'+
         '<div>신호 점수<b>'+(buyable.length ? v.toFixed(0) : "–")+'</b></div>'+
       '</div>'+
+      (s.src ? '<p class="note" style="max-width:none;margin:-3px 0 8px">기준: '+
+        esc(String(s.src).replace(/^naver:/,"국내 ETF ").replace(/^yahoo:/,"미국 "))+
+        (s.srcDate ? ' · '+esc(s.srcDate) : '')+'</p>' : '')+
       '<p class="sec-rule">'+s.rule+'</p>'+
       (s.none ? '<p class="sec-none">'+s.none+'</p>' : '')+
       '<p class="sec-caution">'+s.caution+'</p>'+
@@ -1891,7 +1909,7 @@ async function loadFromPipeline(){
   if (!D.krBase) D.krBase = SNAP.krBase;
   SECTORS.forEach(sec=>{
     const v = j.sectors && j.sectors[sec.id];
-    if (v){ sec.dd = v.dd; sec.p200 = v.p200; sec.live = true; }
+    if (v){ sec.dd = v.dd; sec.p200 = v.p200; sec.live = true; sec.src = v.src; sec.srcDate = v.d; }
     else { sec.dd = sec.snapDD; sec.p200 = sec.snap200; sec.live = false; }
   });
   ["fx","fxband","vix","fng","spx","ndx","us10y","gold","sector"].forEach(k=> mark(k, true));
